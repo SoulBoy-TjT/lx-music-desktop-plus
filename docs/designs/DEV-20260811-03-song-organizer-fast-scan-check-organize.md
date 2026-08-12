@@ -1,0 +1,83 @@
+---
+id: DEV-20260811-03
+type: DEV
+title: 歌曲整理快速扫描、检查与整理技术方案
+status: implemented
+created_at: 2026-08-11
+updated_at: 2026-08-11
+owner: KhalilFong
+req_ids:
+  - REQ-20260806-02
+biz_ids:
+  - BIZ-20260811-03
+  - BIZ-20260811-02
+  - BIZ-20260811-05
+bug_ids:
+  - BUG-20260811-04
+---
+
+# 歌曲整理快速扫描、检查与整理技术方案
+
+## 关联文档
+
+- [REQ-20260806-02](../requirements/REQ-20260806-02-song-folder-organizer.md)
+- [BIZ-20260811-03](../decisions/BIZ-20260811-03-song-organizer-fast-scan-check-organize.md)
+- [BIZ-20260811-02](../decisions/BIZ-20260811-02-flac-converter-safe-exit-cancel.md)
+- [BIZ-20260811-05](../decisions/BIZ-20260811-05-song-organizer-non-cancellable-operations.md)
+- [BUG-20260811-04](../bugs/BUG-20260811-04-song-organizer-eager-validation-and-rescan.md)
+- 原方案：[DEV-20260806-02 歌曲文件夹整理技术方案](DEV-20260806-02-song-folder-organizer.md)
+
+## 状态与快照
+
+- `QuickSnapshot`：目录枚举、路径/类型、稳定物理身份、计数、静态异常、目标名称和版本；不含可播放结论。
+- `ValidationSnapshot`：关联 `quickSnapshotId`，包含每个唯一音频的完整解码结果、检查时间和文件身份；只有完整终态可用于整理。
+- `OperationResult`：记录清理、重命名、引用同步、跳过、失败和回滚，并给出增量后的 quick snapshot 与 validation 有效性。
+
+状态建议：
+
+```text
+idle -> quickScanning -> quickReady
+quickReady -> checking -> checked | checkFailed
+checked -> organizing -> organized | organizePartial | organizeFailed
+内部任务替换或异常收敛 -> idle/保留最近可证明有效的完整快照
+```
+
+## 流程
+
+1. 启动、根目录变化和“重新加载”只运行目录发现与身份/静态安全检查，不调用音频 validator；完成后立即发布 `QuickSnapshot`。歌手目录发现复用 FLAC Converter 的严格输出名解析器，大小写不敏感识别 `<base> MP3`、`<base> MP3（N首）`、`<base> MP3(N首)`，不用任意 `contains`；检查再次应用同一排除边界。
+2. “检查”按歌手和 quick snapshot 版本执行受控并发完整解码；开始前使旧 ValidationSnapshot 不可执行，完整结束后原子提交新快照。
+3. “整理”预览从 ValidationSnapshot 生成：先列出清理目标及确认范围，再计算清理后计数与重命名步骤。执行时复核路径、身份、下载/播放保护和确认交集。
+4. executor 按“操作日志初始化 → 回收站清理 → 空目录处理 → 重新计数 → 专辑重命名 → 歌手重命名 → 路径引用同步 → 终态日志”执行；失败时按既有可逆单元停止或回滚。
+5. 操作结束不 invoke 完整解码 scan；达到可恢复终态后执行一次不调用 validator 的轻量目录刷新，以磁盘事实更新改名路径和数量，不能继续显示旧目录。结合实际步骤判断 validation capability；不能证明仍有效时清除并展示“请重新检查”。空闲时用户可重新加载快速统计。
+6. 快速扫描、检查、整理和恢复均不向 Renderer、公开 IPC 或应用退出协调器暴露取消入口。Service 可保留内部 AbortController 供异常收敛、任务替换和自动化测试使用；应用关闭只要检测到任一歌曲整理任务繁忙，就提示等待并拒绝本次关闭。
+
+## UI 与兼容
+
+- 行操作变为“检查”“整理”“查看详情”“打开文件夹”，并增加“重新加载”快速统计入口；任务运行时“重新加载”和目录切换保持禁用，不替换为取消按钮。
+- 快速结果明确显示“未检查”；检查进度与整理真实步骤进度分离，不能用同一状态冒充。
+- 旧 IPC 在迁移期由 adapter 映射或一次性替换；旧自动重扫路径必须移除，防止重复任务。
+- 既有回收站、硬链接、重解析点、危险根目录、下载/播放保护、操作日志和失败覆盖层语义继续复用。
+
+## 验证计划
+
+- 断言快速扫描对 605 首规模不调用 FFmpeg，并在目录枚举完成后发布歌手/歌曲数。
+- 覆盖三类 FLAC Converter 输出目录、成对中英文括号、Windows 大小写及真实歌手名含 `MP3` 的反例；快速统计与检查排除集合必须一致。
+- 覆盖检查完整/内部异常收敛/失败、文件变化、硬链接单次校验和快照版本淘汰；公开 IPC、Renderer 和应用退出协调器不得调用歌曲整理取消接口。
+- 覆盖整理的清理确认交集、清理后计数、重命名、引用同步、阶段失败/回滚、一次无 FFmpeg 轻量刷新以及不自动完整解码。
+- 覆盖按钮文案/可用性、路由保留、重新加载、异常详情和退出保护分层。
+- 覆盖快速扫描、检查和整理繁忙时关闭请求仅显示一次等待提示，不取消任务，也不继续退出；任务结束后的下一次关闭请求按其他模块状态正常处理。
+- 执行相关 Vitest、类型检查、ESLint、生产构建、Windows x64 安装包静态核验及真实目录人工验收。
+
+## 实施与验证结果
+
+- 已实现 `QuickSnapshot` 与 `ValidationSnapshot` 两阶段模型：快速扫描和重新加载只读取目录事实，检查按歌手完整解码；验证快照使用路径、文件身份、大小和修改时间指纹，在文件集合或内容事实变化时失效。
+- UI 与 IPC 已切换为“检查”“整理”“重新加载”；整理在首个异步边界前取得操作锁，按清理、重新计数、专辑/歌手重命名和引用同步执行，终态只运行一次 validator 调用为 0 的轻量刷新。旧清理/重命名 IPC 和自动完整重扫入口已经移除。
+- 快速扫描与检查复用严格生成目录排除 helper，覆盖无数量、中英文数量后缀、Windows 大小写及名称中普通包含 `MP3` 的反例。
+- Renderer 已移除“取消扫描”按钮与 wrapper，Main 已移除 `song_organizer_scan_cancel` IPC；“重新加载”在扫描、检查或整理期间保持禁用。应用退出协调器把只读与磁盘任务统一视为歌曲整理繁忙，只提示等待且不调用 Service 内部取消等待方法。
+- 快速扫描与整理改造阶段此前完成 22 个文件、140 项定向回归及 52 个文件通过、1 个文件跳过的全专题回归。
+- 本次不可取消合同定向回归 15 个文件、95 项全部通过；最终全专题为 55 个文件通过、1 个文件跳过，461 项通过、1 项跳过。Main/Renderer `tsc --noEmit`、全量 lint（157.5 秒）及最终变更文件定向 lint 均通过，三语言键集合一致。
+- 对用户真实根目录执行只读快速统计：406 首、78 个专辑、2 个有效歌手，约 120.6 ms，validator 调用 0 次，且 `刘雨昕 MP3（199首）` 被正确排除。安装包 Main/Renderer 静态标志确认新流程已入包，旧 `cleanup_preview`、`cleanup_apply`、`rename_apply` 不存在。
+
+Windows x64 NSIS 已重新构建并完成静态核验：`npm run pack` 退出码 0、耗时 139.2 秒，最终 Setup 为 142,759,840 bytes，SHA-256 `E2293782C58385795CFF9467032CA7513ED51F3AE26561FCF80DB3B2B586743B`；包内歌曲整理新流程、不可取消退出协调和随包依赖均已核验，Authenticode 为 `NotSigned`。
+
+当前状态为 `implemented`。安装器尚未运行，真实 Electron 中的检查、整理、回收站、重命名、详情、进度、轻量刷新以及各任务繁忙时的关闭等待提示仍待用户人工验收，关联 BUG 保持 `fixed` 而非 `verified`。
