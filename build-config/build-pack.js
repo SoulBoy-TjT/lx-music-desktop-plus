@@ -52,6 +52,7 @@ const options = {
     },
   ],
 }
+if (process.env.LX_ELECTRON_DIST_PATH) options.electronDist = process.env.LX_ELECTRON_DIST_PATH
 /**
  * @type {import('electron-builder').Configuration}
  * @see https://www.electron.build/configuration/configuration
@@ -71,6 +72,7 @@ const winOptions = {
     shortcutName: 'LX Music',
   },
 }
+if (process.env.LX_SKIP_WIN_EXECUTABLE_EDIT == 'true') winOptions.win.signAndEditExecutable = false
 /**
  * @type {import('electron-builder').Configuration}
  * @see https://www.electron.build/configuration/configuration
@@ -276,6 +278,19 @@ const build = async(target, arch, packageType, publishType) => {
     return
   }
   const targetInfo = createTarget[target](arch, packageType)
+  const config = { ...options, ...targetInfo.options }
+  if (target == 'win' && arch == 'x64') {
+    const ffmpegPath = './resources/song-organizer/ffmpeg.exe'
+    if (!require('fs').existsSync(ffmpegPath)) throw new Error('Missing song organizer FFmpeg. Run npm run prepare:song-organizer first.')
+    config.extraResources = [
+      ...options.extraResources,
+      {
+        from: './resources/song-organizer',
+        to: 'song-organizer',
+        filter: ['ffmpeg.exe', 'LICENSE.txt', 'NOTICE.md'],
+      },
+    ]
+  }
   // Promise is returned
   await builder.build({
     ...targetInfo.buildOptions,
@@ -284,7 +299,7 @@ const build = async(target, arch, packageType, publishType) => {
     ia32: arch == 'x86' || arch == 'x86_64',
     arm64: arch == 'arm64',
     armv7l: arch == 'armv7l',
-    config: { ...options, ...targetInfo.options },
+    config,
   })
   // .then((result) => {
   //   console.log(JSON.stringify(result))

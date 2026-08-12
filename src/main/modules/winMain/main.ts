@@ -6,6 +6,7 @@ import { getProxy, openDevTools as handleOpenDevTools } from '@main/utils'
 import { mainSend } from '@common/mainIpc'
 import { sendFocus, sendTaskbarButtonClick } from './rendererEvent'
 import { encodePath } from '@common/utils/electron'
+import { appExitCoordinator } from '@main/appExit'
 
 let browserWindow: Electron.BrowserWindow | null = null
 
@@ -14,6 +15,10 @@ const winEvent = () => {
 
   browserWindow.on('close', event => {
     if (global.lx.isSkipTrayQuit || !global.lx.appSetting['tray.enable']) {
+      if (!appExitCoordinator.requestExit(() => { browserWindow?.close() })) {
+        event.preventDefault()
+        return
+      }
       browserWindow!.setProgressBar(-1)
       // global.lx.mainWindowClosed = true
       global.lx.event_app.main_window_close()

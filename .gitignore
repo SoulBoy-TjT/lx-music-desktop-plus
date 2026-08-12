@@ -66,6 +66,9 @@ build
 
 dist
 
+resources/song-organizer/ffmpeg.exe
+resources/song-organizer/LICENSE.txt
+
 publish/assets
 
 publish/utils/githubToken.js

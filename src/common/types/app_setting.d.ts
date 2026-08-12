@@ -4,6 +4,8 @@ declare global {
 
   declare namespace LX {
     type AddMusicLocationType = 'top' | 'bottom'
+    type DownloadSavePathMode = 'root' | 'playlist' | 'album'
+    type DownloadFileNameFormat = '歌名 - 歌手' | '歌手 - 歌名' | '歌名' | '曲序. 艺术家 - 歌曲名'
 
     interface AppSetting {
       version: string
@@ -503,7 +505,7 @@ declare global {
       /**
        * 按列表名分组保存
        */
-      'download.isSavePathGroupByListName': boolean
+      'download.savePathMode': DownloadSavePathMode
 
       /**
        * 下载路径
@@ -511,9 +513,19 @@ declare global {
       'download.savePath': string
 
       /**
+       * 歌曲整理是否使用独立根目录
+       */
+      'songOrganizer.useCustomRoot': boolean
+
+      /**
+       * 歌曲整理独立根目录
+       */
+      'songOrganizer.customRoot': string
+
+      /**
        * 文件命名方式
        */
-      'download.fileName': '歌名 - 歌手' | '歌手 - 歌名' | '歌名'
+      'download.fileName': DownloadFileNameFormat
 
       /**
        * 最大并发下载数

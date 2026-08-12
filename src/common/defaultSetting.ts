@@ -5,7 +5,7 @@ const isMac = process.platform == 'darwin'
 const isWin = process.platform == 'win32'
 
 const defaultSetting: LX.AppSetting = {
-  version: '2.1.0',
+  version: '2.2.0',
 
   'common.windowSizeId': 3,
   'common.fontSize': 16,
@@ -110,8 +110,10 @@ const defaultSetting: LX.AppSetting = {
   'list.actionButtonsVisible': false,
 
   'download.enable': false,
-  'download.isSavePathGroupByListName': false,
+  'download.savePathMode': 'album',
   'download.savePath': path.join(os.homedir(), 'Desktop'),
+  'songOrganizer.useCustomRoot': false,
+  'songOrganizer.customRoot': '',
   'download.fileName': '歌名 - 歌手',
   'download.maxDownloadNum': 3,
   'download.skipExistFile': true,

@@ -1,5 +1,5 @@
 import { onBeforeUnmount, watch } from '@common/utils/vueTools'
-import { sendPlayerStatus, onPlayerAction } from '@renderer/utils/ipc'
+import { sendPlayerStatus, onPlayerAction, sendSongOrganizerPlayingPath } from '@renderer/utils/ipc'
 // import store from '@renderer/store'
 
 import { loveList } from '@renderer/store/list/state'
@@ -16,6 +16,18 @@ export default () => {
   // const setLockDesktopLyric = useCommit('setLockDesktopLyric')
   let collect = false
 
+  const syncPlayingFilePath = () => {
+    const current = playMusicInfo.musicInfo
+    const filePath = !current
+      ? undefined
+      : 'progress' in current
+        ? current.metadata.filePath
+        : current.source == 'local'
+          ? current.meta.filePath
+          : undefined
+    sendSongOrganizerPlayingPath(filePath)
+  }
+
   const updateCollectStatus = async() => {
     let status = !!playMusicInfo.musicInfo && await checkListExistMusic(loveList.id, playMusicInfo.musicInfo.id)
     if (collect == status) return false
@@ -31,12 +43,14 @@ export default () => {
   }
   const handleStop = () => {
     if (playMusicInfo.musicInfo != null) return
+    syncPlayingFilePath()
     sendPlayerStatus({ status: 'stoped' })
   }
   const handleError = () => {
     sendPlayerStatus({ status: 'error' })
   }
   const handleSetPlayInfo = async() => {
+    syncPlayingFilePath()
     await updateCollectStatus()
     sendPlayerStatus({
       collect,
@@ -181,6 +195,7 @@ export default () => {
     // const setting = store.getters.setting
     // buttons.lrc = setting.desktopLyric.enable
     // buttons.lockLrc = setting.desktopLyric.isLock
+    syncPlayingFilePath()
     await updateCollectStatus()
     if (playMusicInfo.musicInfo == null) return
     sendPlayerStatus({

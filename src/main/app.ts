@@ -12,6 +12,7 @@ import createWorkers from './worker'
 import { migrateDBData } from './utils/migrate'
 import { openDirInExplorer } from '@common/utils/electron'
 import { setProxyByHost } from '@common/utils/request'
+import { appExitCoordinator } from './appExit'
 
 export const initGlobalData = () => {
   const envParams = parseEnvParams()
@@ -213,7 +214,11 @@ export const listenerAppEvent = (startApp: () => void) => {
     }
   })
 
-  app.on('before-quit', () => {
+  app.on('before-quit', event => {
+    if (!appExitCoordinator.requestExit(() => { app.quit() })) {
+      event.preventDefault()
+      return
+    }
     global.lx.isSkipTrayQuit = true
   })
   app.on('window-all-closed', () => {

@@ -1,8 +1,11 @@
 <template>
   <div :class="$style.view">
-    <router-view v-slot="{ Component }">
+    <router-view v-slot="{ Component, route }">
       <!-- <transition enter-active-class="animated-fast fadeIn" leave-active-class="animated-fast fadeOut"> -->
-      <component :is="Component" class="view-container" />
+      <keep-alive>
+        <component :is="Component" v-if="route.meta.keepAlive" :key="route.name" class="view-container" />
+      </keep-alive>
+      <component :is="Component" v-if="!route.meta.keepAlive" :key="route.name" class="view-container" />
       <!-- </transition> -->
     </router-view>
   </div>

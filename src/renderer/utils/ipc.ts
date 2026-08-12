@@ -4,8 +4,71 @@ import { type ProgressInfo, type UpdateDownloadedEvent, type UpdateInfo } from '
 import { markRaw } from '@common/utils/vueTools'
 import * as hotKeys from '@common/hotKey'
 import { APP_EVENT_NAMES, DATA_KEYS, DEFAULT_SETTING } from '@common/constants'
+import type {
+  SongOrganizerApplyParams,
+  SongOrganizerCapability,
+  SongOrganizerCheckParams,
+  SongOrganizerOperationProgress,
+  SongOrganizerOperationResult,
+  SongOrganizerOrganizeApplyParams,
+  SongOrganizerOrganizePreview,
+  SongOrganizerScanParams,
+  SongOrganizerScanProgress,
+  SongOrganizerSnapshot,
+  SongOrganizerRecovery,
+  SongOrganizerRuntimeState,
+  SongOrganizerValidationSnapshot,
+} from '@common/songOrganizer'
+import type {
+  FlacConversionApplyParams,
+  FlacConversionPreview,
+  FlacConversionPreviewParams,
+  FlacConversionProgress,
+  FlacConversionResult,
+  FlacConverterCapability,
+  FlacConversionPauseState,
+  FlacConverterArtistScanParams,
+  FlacConverterArtistScanResult,
+} from '@common/flacConverter'
 
 type RemoveListener = () => void
+
+export const getSongOrganizerCapability = async() => rendererInvoke<SongOrganizerCapability>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_capability_get)
+export const startSongOrganizerScan = async(params: SongOrganizerScanParams) => rendererInvoke<SongOrganizerScanParams, SongOrganizerSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_start, params)
+export const startSongOrganizerCheck = async(params: SongOrganizerCheckParams) => rendererInvoke<SongOrganizerCheckParams, SongOrganizerValidationSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_check_start, params)
+export const onSongOrganizerScanProgress = (listener: LX.IpcRendererEventListenerParams<SongOrganizerScanProgress>): RemoveListener => {
+  rendererOn(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_progress, listener)
+  return () => rendererOff(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_progress, listener)
+}
+export const onSongOrganizerOperationProgress = (listener: LX.IpcRendererEventListenerParams<SongOrganizerOperationProgress>): RemoveListener => {
+  rendererOn(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_operation_progress, listener)
+  return () => rendererOff(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_operation_progress, listener)
+}
+export const getSongOrganizerRuntimeState = async() => rendererInvoke<SongOrganizerRuntimeState>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_state_get)
+export const onSongOrganizerRuntimeStateChanged = (listener: LX.IpcRendererEventListenerParams<SongOrganizerRuntimeState>): RemoveListener => {
+  rendererOn(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_state_changed, listener)
+  return () => rendererOff(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_state_changed, listener)
+}
+export const sendSongOrganizerPlayingPath = (filePath?: string): void => {
+  rendererSend<string | null>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_playing_path_set, filePath ?? null)
+}
+export const notifySongOrganizerDownloadOccupancyChanged = (): void => {
+  rendererSend(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_download_occupancy_changed)
+}
+export const getSongOrganizerOrganizePreview = async(params: SongOrganizerApplyParams) => rendererInvoke<SongOrganizerApplyParams, SongOrganizerOrganizePreview>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_organize_preview, params)
+export const applySongOrganizerOrganize = async(params: SongOrganizerOrganizeApplyParams) => rendererInvoke<SongOrganizerOrganizeApplyParams, { result: SongOrganizerOperationResult, snapshot?: SongOrganizerSnapshot }>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_organize_apply, params)
+export const getSongOrganizerRecovery = async() => rendererInvoke<SongOrganizerRecovery | null>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_recovery_get)
+export const rollbackSongOrganizerRecovery = async(operationId: string) => rendererInvoke<string, SongOrganizerOperationResult>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_recovery_rollback, operationId)
+export const dismissSongOrganizerRecovery = async(operationId: string) => rendererInvoke<string, boolean>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_recovery_dismiss, operationId)
+export const getFlacConverterCapability = async() => rendererInvoke<FlacConverterCapability>(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_capability_get)
+export const scanFlacConverterArtists = async(params: FlacConverterArtistScanParams) => rendererInvoke<FlacConverterArtistScanParams, FlacConverterArtistScanResult>(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_artists_scan, params)
+export const getFlacConversionPreview = async(params: FlacConversionPreviewParams) => rendererInvoke<FlacConversionPreviewParams, FlacConversionPreview>(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_preview, params)
+export const applyFlacConversion = async(params: FlacConversionApplyParams) => rendererInvoke<FlacConversionApplyParams, FlacConversionResult>(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_apply, params)
+export const setFlacConversionPaused = async(paused: boolean) => rendererInvoke<boolean, FlacConversionPauseState>(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_pause_set, paused)
+export const onFlacConversionProgress = (listener: LX.IpcRendererEventListenerParams<FlacConversionProgress>): RemoveListener => {
+  rendererOn(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_progress, listener)
+  return () => rendererOff(WIN_MAIN_RENDERER_EVENT_NAME.flac_converter_progress, listener)
+}
 
 export const getSetting = async() => {
   return rendererInvoke<LX.AppSetting>(CMMON_EVENT_NAME.get_app_setting)
@@ -852,4 +915,31 @@ export const downloadTasksRemove = async(ids: string[]) => {
 }
 export const downloadListClear = async() => {
   return rendererInvoke(WIN_MAIN_RENDERER_EVENT_NAME.download_list_clear)
+}
+export const getDownloadAudioValidatorPath = async() => {
+  return rendererInvoke<string | null>(WIN_MAIN_RENDERER_EVENT_NAME.download_audio_validator_path_get)
+}
+export const resetDownloadAudioTask = async(taskId: string) => {
+  return rendererInvoke<string, undefined>(WIN_MAIN_RENDERER_EVENT_NAME.download_audio_task_reset, taskId)
+}
+export const beginDownloadAudioTask = async(taskId: string) => {
+  return rendererInvoke<string, LX.Download.DownloadAudioLifecycleResult>(WIN_MAIN_RENDERER_EVENT_NAME.download_audio_task_begin, taskId)
+}
+export const isDownloadAudioTaskCancelled = async(taskId: string) => {
+  return rendererInvoke<string, boolean>(WIN_MAIN_RENDERER_EVENT_NAME.download_audio_task_cancelled_get, taskId)
+}
+export const finishDownloadAudioTask = async(params: LX.Download.DownloadAudioTaskFinishParams) => {
+  return rendererInvoke<LX.Download.DownloadAudioTaskFinishParams, undefined>(
+    WIN_MAIN_RENDERER_EVENT_NAME.download_audio_task_finish,
+    params,
+  )
+}
+export const validateDownloadAudio = async(params: LX.Download.DownloadAudioValidationParams) => {
+  return rendererInvoke<LX.Download.DownloadAudioValidationParams, LX.Download.DownloadAudioValidationResult>(
+    WIN_MAIN_RENDERER_EVENT_NAME.download_audio_validate,
+    params,
+  )
+}
+export const cancelDownloadAudioValidation = async(taskId: string) => {
+  return rendererInvoke<string, boolean>(WIN_MAIN_RENDERER_EVENT_NAME.download_audio_validate_cancel, taskId)
 }

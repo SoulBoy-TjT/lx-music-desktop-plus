@@ -58,11 +58,32 @@ const router = createRouter({
       path: '/album-collection',
       name: 'AlbumCollection',
       component: require('./views/Tools/index.vue').default,
-      meta: { name: 'AlbumCollection', keepAlive: true },
+      meta: {
+        name: 'AlbumCollection',
+        keepAlive: true,
+      },
     },
     {
       path: '/tools',
       redirect: '/album-collection',
+    },
+    {
+      path: '/song-organizer',
+      name: 'SongOrganizer',
+      component: require('./views/SongOrganizer/index.vue').default,
+      meta: {
+        name: 'SongOrganizer',
+        keepAlive: true,
+      },
+    },
+    {
+      path: '/flac-converter',
+      name: 'FlacConverter',
+      component: require('./views/FlacConverter/index.vue').default,
+      meta: {
+        name: 'FlacConverter',
+        keepAlive: true,
+      },
     },
     {
       path: '/setting',

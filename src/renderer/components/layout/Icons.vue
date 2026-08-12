@@ -119,12 +119,43 @@
         <path d="M317.24,241.35a18,18,0,0,1-12.76-5.29l-58.26-58.26a18,18,0,0,1,25.52-25.52L330,210.55a18,18,0,0,1-12.76,30.81Z" />
         <path d="M223.08,360.18A53.95,53.95,0,1,1,277,306.23,54,54,0,0,1,223.08,360.18Zm0-71.8a17.85,17.85,0,1,0,17.85,17.85A17.87,17.87,0,0,0,223.08,288.38Z" />
       </g>
-      <g id="icon-album-search" fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+      <g
+        id="icon-album-search"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="28"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <rect x="47" y="53" width="252" height="310" rx="24" />
         <circle cx="173" cy="207" r="72" />
         <circle cx="173" cy="207" r="15" fill="currentColor" stroke="none" />
         <circle cx="326" cy="307" r="52" />
         <path d="M364 345l43 43" />
+      </g>
+      <g
+        id="icon-music-organize"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="28"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M43 129V341c0 18 14 32 32 32h276c18 0 32-14 32-32V151c0-18-14-32-32-32H214l-38-46H75c-18 0-32 14-32 32v24Z" />
+        <path d="m100 210 18 18 31-35M177 211h133M100 284l18 18 31-35M177 285h133" />
+      </g>
+      <g
+        id="icon-audio-convert"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="28"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M94 42h163l75 75v266H94V42Z" />
+        <path d="M257 42v75h75" />
+        <path d="M148 209c22-42 72-61 116-42 12 5 23 13 32 22M296 151v38h-38" />
+        <path d="M278 292c-22 42-72 61-116 42-12-5-23-13-32-22M130 350v-38h38" />
       </g>
       <g id="icon-leaderboard" fill="currentColor">
         <!-- 0 0 805.65 805.58-->

@@ -12,6 +12,8 @@ import music from './music'
 import download from './download'
 import soundEffect from './soundEffect'
 import openAPI from './openAPI'
+import songOrganizer from './songOrganizer'
+import flacConverter from './flacConverter'
 import { sendEvent } from '../main'
 
 export * from './app'
@@ -39,6 +41,8 @@ export default () => {
   download()
   soundEffect()
   openAPI()
+  songOrganizer()
+  flacConverter()
 
   global.lx.event_app.on('updated_config', (keys, setting) => {
     sendConfigChange(setting)
