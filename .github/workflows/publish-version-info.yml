@@ -1,16 +1,19 @@
-name: Publish NPM Version Info
+name: Publish NPM Version Info (disabled for derivative repository)
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   dispatch:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - name: Repository Dispatch
         uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.PAT }}
-          repository: lyswhut/lx-music-desktop-version-info
+          repository: SoulBoy-TjT/lx-music-desktop-plus-version-info
           event-type: npm-release

@@ -1,34 +1,34 @@
-<p align="center"><a href="https://github.com/lyswhut/lx-music-desktop"><img width="200" src="https://github.com/lyswhut/lx-music-desktop/blob/master/doc/images/icon.png" alt="lx-music logo"></a></p>
+<p align="center"><a href="https://github.com/SoulBoy-TjT/lx-music-desktop-plus"><img width="200" src="./doc/images/icon.png" alt="LX Music Desktop Plus logo"></a></p>
 
-<h1 align="center">LX Music 桌面版</h1>
+<h1 align="center">LX Music Desktop Plus</h1>
+
+<p align="center">基于 LX Music Desktop v2.12.2 的非官方增强版</p>
 
 <p align="center">
-  <a href="https://github.com/lyswhut/lx-music-desktop/releases"><img src="https://img.shields.io/github/release/lyswhut/lx-music-desktop" alt="Release version"></a>
-  <a href="https://github.com/lyswhut/lx-music-desktop/actions/workflows/release.yml"><img src="https://github.com/lyswhut/lx-music-desktop/workflows/Build/badge.svg" alt="Build status"></a>
-  <a href="https://github.com/lyswhut/lx-music-desktop/actions/workflows/beta-pack.yml"><img src="https://github.com/lyswhut/lx-music-desktop/workflows/Build%20Beta/badge.svg" alt="Build status"></a>
-  <a href="https://electronjs.org/releases/stable"><img src="https://img.shields.io/github/package-json/dependency-version/lyswhut/lx-music-desktop/dev/electron/master" alt="Electron version"></a>
-  <!-- <a href="https://github.com/lyswhut/lx-music-desktop/releases"><img src="https://img.shields.io/github/downloads/lyswhut/lx-music-desktop/latest/total" alt="Downloads"></a> -->
-  <a href="https://github.com/lyswhut/lx-music-desktop/tree/dev"><img src="https://img.shields.io/github/package-json/v/lyswhut/lx-music-desktop/dev" alt="Dev branch version"></a>
-  <!-- <a href="https://github.com/lyswhut/lx-music-desktop/blob/master/LICENSE"><img src="https://img.shields.io/github/license/lyswhut/lx-music-desktop" alt="License"></a> -->
+  <a href="https://github.com/SoulBoy-TjT/lx-music-desktop-plus/actions/workflows/build-test.yml"><img src="https://github.com/SoulBoy-TjT/lx-music-desktop-plus/actions/workflows/build-test.yml/badge.svg?branch=main" alt="Build status"></a>
+  <a href="https://github.com/SoulBoy-TjT/lx-music-desktop-plus/blob/main/LICENSE"><img src="https://img.shields.io/github/license/SoulBoy-TjT/lx-music-desktop-plus" alt="License"></a>
 </p>
 
-<!-- [![GitHub release][1]][2]
-[![Build status][3]][4]
-[![GitHub Releases Download][5]][6]
-[![dev branch][7]][8]
-[![GitHub license][9]][10] -->
+> [!IMPORTANT]
+> 本仓库是由 SoulBoy-TjT 维护的非官方衍生版本，与 LX Music 官方项目及其维护者无隶属关系。原项目代码与作者归属见 [lyswhut/lx-music-desktop](https://github.com/lyswhut/lx-music-desktop)。本仓库当前仅发布源码，尚未提供正式安装包。
 
-<!-- [1]: https://img.shields.io/github/release/lyswhut/lx-music-desktop
-[2]: https://github.com/lyswhut/lx-music-desktop/releases
-[3]: https://ci.appveyor.com/api/projects/status/flrsqd5ymp8fnte5?svg=true
-[4]: https://ci.appveyor.com/project/lyswhut/lx-music-desktop
-[5]: https://img.shields.io/github/downloads/lyswhut/lx-music-desktop/latest/total
-[5]: https://img.shields.io/github/downloads/lyswhut/lx-music-desktop/total
-[6]: https://github.com/lyswhut/lx-music-desktop/releases
-[7]: https://img.shields.io/github/package-json/v/lyswhut/lx-music-desktop/dev
-[8]: https://github.com/lyswhut/lx-music-desktop/tree/dev
-[9]: https://img.shields.io/github/license/lyswhut/lx-music-desktop
-[10]: https://github.com/lyswhut/lx-music-desktop/blob/master/LICENSE -->
+## 增强功能
+
+- 抓取四个平台的歌手专辑，并生成可继续处理的来源歌单。
+- 按歌手、专辑和曲序组织下载目录，并为 Windows 长文件名预留内部临时文件空间。
+- 提供歌曲目录安全整理和 FLAC 批量转换工具；当前以 Windows x64 为首期支持与验收范围。
+- 校验下载音频的真实格式，安全发布成品，并修复可证明完整的 FLAC 尾部异常。
+
+## 仓库与发布边界
+
+- 本仓库默认分支为 `main`；维护工作区将官方项目配置为 `upstream`，用于归属追溯和按需比对上游改动。
+- 上游的自动发布和版本分发工作流已停用，避免向官方仓库或官方版本服务写入数据。
+- 安装包身份、自动更新源和品牌资源仍需在正式发布二进制文件前独立化；当前不把本仓库构建视为正式发行版。
+- 自动化验证、缺陷证据和仍待完成的安装态及真实 Electron 人工验收见 [`docs/progress/PROG-20260811.md`](./docs/progress/PROG-20260811.md)。
+
+## 上游项目说明
+
+以下内容是保留的上游原文，仅适用于官方仓库，用于查阅原始使用说明与许可证约束；其中分支、贡献和发布地址不代表本衍生仓库的配置。
 
 <p align="center">一个基于 Electron & Vue 开发的音乐软件</p>
 

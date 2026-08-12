@@ -1,9 +1,15 @@
 name: Run build test
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
-      - dev
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -23,6 +29,15 @@ jobs:
 
       - name: Eslint check
         run: npm run lint
+
+      - name: Run automated tests
+        run: npm run test:artist-discography -- --reporter=dot
+
+      - name: Type check
+        run: |
+          npx tsc -p src/common/tsconfig.json --noEmit
+          npx tsc -p src/main/tsconfig.json --noEmit
+          npx tsc -p src/renderer/tsconfig.json --noEmit
 
       - name: Test Build
         run: npm run build

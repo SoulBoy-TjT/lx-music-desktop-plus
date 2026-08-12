@@ -1,7 +1,7 @@
 {
   "name": "lx-music-desktop",
   "version": "2.12.2",
-  "description": "一个免费的音乐查找助手",
+  "description": "基于 LX Music Desktop 的非官方增强版",
   "main": "./dist/main.js",
   "scripts": {
     "pack": "node build-config/pack.js && npm run pack:win:setup:x64",
@@ -93,7 +93,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lyswhut/lx-music-desktop.git"
+    "url": "git+https://github.com/SoulBoy-TjT/lx-music-desktop-plus.git"
   },
   "keywords": [
     "music-player",
@@ -106,9 +106,9 @@
   },
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/lyswhut/lx-music-desktop/issues"
+    "url": "https://github.com/SoulBoy-TjT/lx-music-desktop-plus/issues"
   },
-  "homepage": "https://github.com/lyswhut/lx-music-desktop#readme",
+  "homepage": "https://github.com/SoulBoy-TjT/lx-music-desktop-plus#readme",
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",
     "@types/better-sqlite3": "^7.6.13",
