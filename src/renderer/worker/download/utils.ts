@@ -1,8 +1,8 @@
-import { DOWNLOAD_STATUS, QUALITYS } from '@common/constants'
-import { filterFileName } from '@common/utils/common'
+import { DOWNLOAD_STATUS } from '@common/constants'
 import { buildLyrics } from './lrcTool'
-import fs from 'fs'
-import { clipFileNameLength, clipNameLength, formatMusicName } from '@common/utils/tools'
+import { atomicWriteFile } from '@common/utils/atomicFile'
+import { resolveDownloadTarget } from '@common/utils/downloadTarget'
+import { resolveDownloadQuality } from '@common/utils/downloadQuality'
 
 /**
  * 保存歌词文件
@@ -18,15 +18,11 @@ export const saveLrc = async(lrcData: LX.Music.LyricInfo, info: {
   const lrc = buildLyrics(lrcData, info.downloadLxlrc, info.downloadTlrc, info.downloadRlrc)
   switch (info.format) {
     case 'gbk':
-      fs.writeFile(info.filePath, iconv.encode(lrc, 'gbk', { addBOM: true }), err => {
-        if (err) console.log(err)
-      })
+      await atomicWriteFile(info.filePath, iconv.encode(lrc, 'gbk', { addBOM: true }))
       break
     case 'utf8':
     default:
-      fs.writeFile(info.filePath, iconv.encode(lrc, 'utf8', { addBOM: true }), err => {
-        if (err) console.log(err)
-      })
+      await atomicWriteFile(info.filePath, iconv.encode(lrc, 'utf8', { addBOM: true }))
       break
   }
 }
@@ -55,24 +51,30 @@ export const getExt = (type: string): LX.Download.FileExt => {
  * @param qualityList
  */
 export const getMusicType = (musicInfo: LX.Music.MusicInfoOnline, type: LX.Quality, qualityList: LX.QualityList): LX.Quality => {
-  let list = qualityList[musicInfo.source]
-  if (!list) return '128k'
-  if (!list.includes(type)) type = list[list.length - 1]
-  const rangeType = QUALITYS.slice(QUALITYS.indexOf(type))
-  for (const type of rangeType) {
-    if (musicInfo.meta._qualitys[type]) return type
-  }
-  return '128k'
+  return resolveDownloadQuality(musicInfo, type, qualityList[musicInfo.source]) ?? '128k'
 }
 
 // const checkExistList = (list: LX.Download.ListItem[], musicInfo: LX.Music.MusicInfo, type: LX.Quality, ext: string): boolean => {
 //   return list.some(s => s.id === musicInfo.id && (s.metadata.type === type || s.metadata.ext === ext))
 // }
 
-export const createDownloadInfo = (musicInfo: LX.Music.MusicInfoOnline, type: LX.Quality, fileName: string, qualityList: LX.QualityList, listId?: string) => {
+export const createDownloadInfo = (
+  musicInfo: LX.Music.MusicInfoOnline,
+  type: LX.Quality,
+  options: LX.Download.CreateTaskOptions,
+  qualityList: LX.QualityList,
+) => {
   type = getMusicType(musicInfo, type, qualityList)
   let ext = getExt(type)
   const key = `${musicInfo.id}_${type}_${ext}`
+  const target = resolveDownloadTarget({
+    musicInfo,
+    ext,
+    fileNameFormat: options.fileNameFormat,
+    savePath: options.savePath,
+    savePathMode: options.savePathMode,
+    playlistName: options.playlistName,
+  })
   // if (checkExistList(list, musicInfo, type, ext)) return null
   const downloadInfo: LX.Download.ListItem = {
     id: key,
@@ -87,11 +89,13 @@ export const createDownloadInfo = (musicInfo: LX.Music.MusicInfoOnline, type: LX
     metadata: {
       musicInfo,
       url: null,
+      requestedQuality: type,
       quality: type,
       ext,
-      filePath: '',
-      listId,
-      fileName: filterFileName(`${clipFileNameLength(formatMusicName(fileName, musicInfo.name, clipNameLength(musicInfo.singer)))}.${ext}`),
+      filePath: target.filePath,
+      listId: options.listId,
+      fileName: target.fileName,
+      targetFallbacks: target.fallbackReasons,
     },
   }
   // downloadInfo.metadata.filePath = joinPath(savePath, downloadInfo.metadata.fileName)

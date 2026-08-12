@@ -3,6 +3,7 @@ import { playMusicInfo, playInfo } from '@renderer/store/player/state'
 import { downloadStatus } from '@renderer/store/download/state'
 import { getDownloadList } from '@renderer/store/download/action'
 import { LIST_IDS } from '@common/constants'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 
 export default (activeTab) => {
@@ -23,7 +24,7 @@ export default (activeTab) => {
       case 'error':
         return listAll.value.filter(i => i.status == downloadStatus.ERROR)
       case 'finished':
-        return listAll.value.filter(i => i.status == downloadStatus.COMPLETED)
+        return listAll.value.filter(i => isDownloadCompleted(i))
       default:
         return [...listAll.value]
     }

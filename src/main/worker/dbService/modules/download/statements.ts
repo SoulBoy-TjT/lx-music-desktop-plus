@@ -55,7 +55,10 @@ export const createUpdateStatement = () => {
   const db = getDB()
   return db.prepare<[LX.DBService.DownloadMusicInfo]>(`
     UPDATE "main"."download_list"
-    SET "isComplate"=@isComplate, "status"=@status, "statusText"=@statusText, "progress_downloaded"=@progress_downloaded, "progress_total"=@progress_total, "url"=@url, "filePath"=@filePath
+    SET "isComplate"=@isComplate, "status"=@status, "statusText"=@statusText,
+      "progress_downloaded"=@progress_downloaded, "progress_total"=@progress_total,
+      "url"=@url, "quality"=@quality, "ext"=@ext, "fileName"=@fileName,
+      "filePath"=@filePath, "musicInfo"=@musicInfo
     WHERE "id"=@id`)
 }
 

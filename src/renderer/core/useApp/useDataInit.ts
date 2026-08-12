@@ -10,6 +10,7 @@ import { onBeforeUnmount } from '@common/utils/vueTools'
 import { appSetting } from '@renderer/store/setting'
 import { playMusicInfo } from '@renderer/store/player/state'
 import { initDislikeInfo, registerRemoteDislikeAction } from '@renderer/core/dislikeList'
+import { getDownloadList } from '@renderer/store/download/action'
 
 const initPrevPlayInfo = async() => {
   const info = await getPlayInfo()
@@ -46,7 +47,14 @@ export default () => {
     ]).catch(err => {
       log.error(err)
     })
-    void music.init() // 初始化音乐sdk
+    void music.init()
+      .catch(err => {
+        log.error(err)
+      })
+      .then(() => getDownloadList())
+      .catch(err => {
+        log.error(err)
+      }) // 初始化音乐sdk并恢复下载后处理
     unregister = registerAction((ids) => {
       window.app_event.myListUpdate(ids)
     })

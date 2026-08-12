@@ -2,13 +2,13 @@ const path = require('path')
 const mp3Meta = require('./mp3Meta')
 const flacMeta = require('./flacMeta')
 
-exports.setMeta = (filePath, meta, proxy) => {
-  switch (path.extname(filePath)) {
+exports.setMeta = async(filePath, meta, proxy) => {
+  switch (path.extname(filePath).toLowerCase()) {
     case '.mp3':
-      mp3Meta(filePath, meta, proxy)
+      await mp3Meta(filePath, meta, proxy)
       break
     case '.flac':
-      flacMeta(filePath, meta, proxy)
+      await flacMeta(filePath, meta, proxy)
       break
   }
 }

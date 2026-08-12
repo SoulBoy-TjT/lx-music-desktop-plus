@@ -33,3 +33,5 @@ export const createDownloadWorker = () => {
 export const proxyCallback = <Args extends any[]>(callback: (...T: Args) => void) => {
   return Comlink.proxy(callback)
 }
+
+export const proxyObject = <T extends object>(object: T): T & Comlink.ProxyMarked => Comlink.proxy(object)

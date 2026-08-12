@@ -1,7 +1,7 @@
 import { setMeta } from '@common/utils/musicMeta'
 import { buildLyrics } from './lrcTool'
 
-export const writeMeta = ({ filePath, isEmbedLyricLx, isEmbedLyricT, isEmbedLyricR, ...meta }: {
+export const writeMeta = async({ filePath, isEmbedLyricLx, isEmbedLyricT, isEmbedLyricR, ...meta }: {
   filePath: string
   isEmbedLyricLx: boolean
   isEmbedLyricT: boolean
@@ -11,7 +11,7 @@ export const writeMeta = ({ filePath, isEmbedLyricLx, isEmbedLyricT, isEmbedLyri
   album: string
   APIC: string | null
 }, lyric: LX.Music.LyricInfo, proxy?: { host: string, port: number }) => {
-  setMeta(filePath, { ...meta, lyrics: buildLyrics(lyric, isEmbedLyricLx, isEmbedLyricT, isEmbedLyricR) }, proxy)
+  await setMeta(filePath, { ...meta, lyrics: buildLyrics(lyric, isEmbedLyricLx, isEmbedLyricT, isEmbedLyricR) }, proxy)
 }
 
 export { saveLrc } from './utils'

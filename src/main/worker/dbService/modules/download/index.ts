@@ -6,6 +6,10 @@ import {
   deleteDownloadList,
   clearDownloadList,
 } from './dbHelper'
+import {
+  decodeDownloadMusicInfoMetadata,
+  encodeDownloadMusicInfoMetadata,
+} from '@common/utils/downloadTask'
 
 let list: LX.Download.ListItem[]
 
@@ -23,7 +27,15 @@ const toDBDownloadInfo = (musicInfos: LX.Download.ListItem[], offset: number = 0
       ext: info.metadata.ext,
       fileName: info.metadata.fileName,
       filePath: info.metadata.filePath,
-      musicInfo: JSON.stringify(info.metadata.musicInfo),
+      musicInfo: JSON.stringify(encodeDownloadMusicInfoMetadata(info.metadata.musicInfo, {
+        requestedQuality: info.metadata.requestedQuality ?? info.metadata.quality,
+        targetFallbacks: info.metadata.targetFallbacks,
+        actualFormat: info.metadata.actualFormat,
+        formatDowngrade: info.metadata.formatDowngrade,
+        postProcessingError: info.metadata.postProcessingError,
+        postProcessingWarning: info.metadata.postProcessingWarning,
+        stagingPath: info.metadata.stagingPath,
+      })),
       position: offset + index,
     }
   })
@@ -31,7 +43,16 @@ const toDBDownloadInfo = (musicInfos: LX.Download.ListItem[], offset: number = 0
 
 const initDownloadList = () => {
   list = queryDownloadList().map(item => {
-    const musicInfo = JSON.parse(item.musicInfo) as LX.Music.MusicInfoOnline
+    const {
+      musicInfo,
+      requestedQuality,
+      targetFallbacks,
+      actualFormat,
+      formatDowngrade,
+      postProcessingError,
+      postProcessingWarning,
+      stagingPath,
+    } = decodeDownloadMusicInfoMetadata(JSON.parse(item.musicInfo) as LX.Music.MusicInfoOnline)
     return {
       id: item.id,
       isComplate: item.isComplate == 1,
@@ -45,10 +66,17 @@ const initDownloadList = () => {
       metadata: {
         musicInfo,
         url: item.url,
+        requestedQuality: requestedQuality ?? item.quality,
         quality: item.quality,
         ext: item.ext,
         fileName: item.fileName,
         filePath: item.filePath,
+        targetFallbacks,
+        actualFormat,
+        formatDowngrade,
+        postProcessingError,
+        postProcessingWarning,
+        stagingPath,
       },
     }
   })

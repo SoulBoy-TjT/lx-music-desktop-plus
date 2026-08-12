@@ -140,6 +140,13 @@ export default (setting: any): Partial<LX.AppSetting> => {
     setting.version = '2.1.0'
   }
 
+  // 迁移 v2.2.0 之前的下载目录设置
+  if (compareVer(setting.version, '2.2.0') < 0) {
+    setting['download.savePathMode'] = setting['download.isSavePathGroupByListName'] ? 'playlist' : 'root'
+    delete setting['download.isSavePathGroupByListName']
+    setting.version = '2.2.0'
+  }
+
 
   return setting
 }

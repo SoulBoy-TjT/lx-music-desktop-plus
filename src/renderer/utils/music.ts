@@ -2,9 +2,10 @@ import { checkPath, joinPath, extname, basename, readFile, getFileStats } from '
 import { formatPlayTime } from '@common/utils/common'
 import { decodeKrc } from '@common/utils/lyricUtils/kg'
 import { type IAudioMetadata } from 'music-metadata'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 export const checkDownloadFileAvailable = async(musicInfo: LX.Download.ListItem, savePath: string): Promise<boolean> => {
-  return musicInfo.isComplate && !/\.ape$/.test(musicInfo.metadata.fileName) &&
+  return isDownloadCompleted(musicInfo) && !/\.ape$/.test(musicInfo.metadata.fileName) &&
     (await checkPath(musicInfo.metadata.filePath) || await checkPath(joinPath(savePath, musicInfo.metadata.fileName)))
 }
 
@@ -26,7 +27,7 @@ export const checkMusicFileAvailable = async(musicInfo: LX.Music.MusicInfo | LX.
 }
 
 export const getDownloadFilePath = async(musicInfo: LX.Download.ListItem, savePath: string): Promise<string> => {
-  if (musicInfo.isComplate && !/\.ape$/.test(musicInfo.metadata.fileName)) {
+  if (isDownloadCompleted(musicInfo) && !/\.ape$/.test(musicInfo.metadata.fileName)) {
     if (await checkPath(musicInfo.metadata.filePath)) return musicInfo.metadata.filePath
     const path = joinPath(savePath, musicInfo.metadata.fileName)
     if (await checkPath(path)) return path

@@ -1,5 +1,6 @@
 import { getMusicInfosByList } from './musicInfo'
 import { createHttpFetch } from './util'
+import { normalizeReleaseDate } from '@common/utils/downloadTarget'
 
 export default {
   /**
@@ -29,6 +30,7 @@ export default {
       image: albumInfo.sizable_cover.replace('{size}', 240),
       desc: albumInfo.intro,
       authorName: albumInfo.author_name,
+      releaseDate: normalizeReleaseDate(albumInfo.publish_date),
       // play_count: this.formatPlayCount(info.count),
     }
   },
@@ -44,9 +46,27 @@ export default {
     let result = await getMusicInfosByList(albumList.info)
 
     const info = await this.getAlbumInfo(id)
+    const rawTrackByHash = new Map(albumList.info.map((track, index) => [track.hash, { track, index }]))
+    const declaredTrackTotal = Number(albumList.total)
+    const trackTotal = Number.isSafeInteger(declaredTrackTotal) && declaredTrackTotal >= 0
+      ? declaredTrackTotal
+      : result.length
+    result = (result || []).map((musicInfo, index) => {
+      const rawTrackInfo = rawTrackByHash.get(musicInfo.hash)
+      const providerSort = Number(rawTrackInfo?.track?.trans_param?.sort)
+      return {
+        ...musicInfo,
+        albumArtist: info.authorName,
+        releaseDate: info.releaseDate,
+        trackNumber: Number.isSafeInteger(providerSort) && providerSort > 0
+          ? providerSort
+          : (rawTrackInfo?.index ?? index) + 1,
+        trackTotal,
+      }
+    })
 
     return {
-      list: result || [],
+      list: result,
       page,
       limit,
       total: albumList.total,

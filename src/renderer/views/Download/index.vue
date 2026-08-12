@@ -46,10 +46,10 @@
             <div class="list-item-cell" style="flex: 0 0 10%;">{{ getTypeName(item.metadata.quality) }}</div>
             <div class="list-item-cell" style="flex: 0 0 13%; padding-left: 0; padding-right: 0;">
               <material-list-buttons
-                :index="index" :download-btn="false" :file-btn="item.status != downloadStatus.ERROR" remove-btn="remove-btn"
-                :start-btn="!item.isComplate && item.status != downloadStatus.WAITING && (item.status != downloadStatus.RUN)"
+                :index="index" :download-btn="false" :file-btn="isDownloadCompleted(item)" :remove-btn="!isDownloadPostProcessing(item)"
+                :start-btn="isDownloadPostProcessingFailed(item) || (!item.isComplate && item.status != downloadStatus.WAITING && item.status != downloadStatus.RUN)"
                 :pause-btn="!item.isComplate && (item.status == downloadStatus.RUN || item.status == downloadStatus.WAITING)"
-                :list-add-btn="false" :play-btn="item.status == downloadStatus.COMPLETED"
+                :list-add-btn="false" :play-btn="isDownloadCompleted(item)"
                 :search-btn="item.status == downloadStatus.ERROR" @btn-click="handleListBtnClick"
               />
             </div>
@@ -79,8 +79,8 @@ import usePlay from './usePlay'
 import useTaskActions from './useTaskActions'
 import useMusicAdd from './useMusicAdd'
 import { downloadStatus } from '@renderer/store/download/state'
-import { appSetting } from '@renderer/store/setting'
-import { formatMusicName } from '@renderer/utils'
+import { isDownloadPostProcessing, isDownloadPostProcessingFailed } from '@renderer/store/download/postProcessState'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 export default {
   name: 'Download',
@@ -154,7 +154,9 @@ export default {
         return
       }
       const task = list.value[index]
-      if (task.isComplate) {
+      if (isDownloadPostProcessing(task)) {
+        return
+      } else if (isDownloadCompleted(task)) {
         handlePlayMusic(list.value.indexOf(task), true)
       } else if (task.status === downloadStatus.RUN || task.status === downloadStatus.WAITING) {
         void handlePauseTask(index, true)
@@ -181,6 +183,10 @@ export default {
     }
 
     const handleListBtnClick = ({ action, index }) => {
+      if (
+        isDownloadPostProcessing(list.value[index]) &&
+        (action === 'play' || action === 'start' || action === 'pause' || action === 'remove')
+      ) return
       switch (action) {
         case 'play':
           handlePlayMusic(index, true)
@@ -204,7 +210,7 @@ export default {
     }
 
     const getName = (downloadInfo) => {
-      return formatMusicName(appSetting['download.fileName'], downloadInfo.metadata.musicInfo.name, downloadInfo.metadata.musicInfo.singer)
+      return downloadInfo.metadata.fileName.replace(/\.(?:mp3|flac|wav|ape)$/i, '')
     }
     const getTypeName = (quality) => {
       return quality == 'flac24bit' ? 'FLAC Hires' : quality?.toUpperCase()
@@ -238,6 +244,9 @@ export default {
 
       getName,
       getTypeName,
+      isDownloadPostProcessing,
+      isDownloadPostProcessingFailed,
+      isDownloadCompleted,
     }
   },
 }

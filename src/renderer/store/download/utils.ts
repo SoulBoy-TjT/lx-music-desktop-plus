@@ -6,7 +6,7 @@ import { joinPath } from '@common/utils/nodejs'
 
 export const buildSavePath = (musicInfo: LX.Download.ListItem) => {
   let savePath = appSetting['download.savePath']
-  if (appSetting['download.isSavePathGroupByListName']) {
+  if (appSetting['download.savePathMode'] == 'playlist') {
     let dirName: string | undefined
     const listId = musicInfo.metadata.listId
     switch (listId) {
@@ -24,4 +24,15 @@ export const buildSavePath = (musicInfo: LX.Download.ListItem) => {
     savePath = joinPath(savePath, clipFileNameLength(dirName ?? window.i18n.t(defaultList.name)))
   }
   return savePath
+}
+
+export const getPlaylistName = (listId?: string) => {
+  switch (listId) {
+    case defaultList.id:
+      return window.i18n.t(defaultList.name)
+    case loveList.id:
+      return window.i18n.t(loveList.name)
+    default:
+      return userLists.find(list => list.id === listId)?.name
+  }
 }

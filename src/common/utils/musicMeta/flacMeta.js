@@ -1,6 +1,7 @@
 const fs = require('fs')
 const fsPromises = fs.promises
 const path = require('path')
+const { pipeline } = require('stream/promises')
 const getImgSize = require('image-size')
 const download = require('./downloader')
 
@@ -8,6 +9,22 @@ const FlacProcessor = require('./flac-metadata/index')
 
 const extReg = /^(\.(?:jpe?g|png)).*$/
 const vendor = 'reference libFLAC 1.2.1 20070917'
+
+const recoverInterruptedReplacement = async(filePath, backupPath) => {
+  try {
+    await fsPromises.access(backupPath)
+  } catch (err) {
+    if (err.code === 'ENOENT') return
+    throw err
+  }
+  try {
+    await fsPromises.access(filePath)
+    await fsPromises.rm(backupPath, { force: true })
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err
+    await fsPromises.rename(backupPath, filePath)
+  }
+}
 
 const writeMeta = async(filePath, meta, picPath) => {
   const comments = Object.keys(meta).map(key => `${key.toUpperCase()}=${meta[key] || ''}`)
@@ -41,41 +58,59 @@ const writeMeta = async(filePath, meta, picPath) => {
     }
   }
 
-  const reader = fs.createReadStream(filePath)
   const tempPath = filePath + '.lxmtemp'
-  const writer = fs.createWriteStream(tempPath)
-  const flacProcessor = new FlacProcessor()
-  flacProcessor.writeMeta(data)
-
-  reader.pipe(flacProcessor).pipe(writer).on('finish', () => {
-    fs.unlink(filePath, err => {
-      if (err) return console.log(err.message)
-      fs.rename(tempPath, filePath, err => {
-        if (err) console.log(err.message)
-      })
-    })
-  })
+  const backupPath = filePath + '.lxmbackup'
+  await fsPromises.rm(tempPath, { force: true })
+  await recoverInterruptedReplacement(filePath, backupPath)
+  try {
+    const reader = fs.createReadStream(filePath)
+    const writer = fs.createWriteStream(tempPath)
+    const flacProcessor = new FlacProcessor()
+    flacProcessor.writeMeta(data)
+    await pipeline(reader, flacProcessor, writer)
+    await fsPromises.rename(filePath, backupPath)
+    try {
+      await fsPromises.rename(tempPath, filePath)
+    } catch (err) {
+      await fsPromises.rename(backupPath, filePath)
+      throw err
+    }
+    await fsPromises.rm(backupPath, { force: true })
+  } catch (err) {
+    await fsPromises.rm(tempPath, { force: true }).catch(() => {})
+    throw err
+  }
 }
 
-module.exports = (filePath, meta, proxy) => {
-  if (!meta.APIC) return writeMeta(filePath, meta)
+const getCoverExtension = (url) => {
+  try {
+    return path.extname(new URL(url).pathname).replace(extReg, '$1') || '.jpg'
+  } catch {
+    return '.jpg'
+  }
+}
+
+module.exports = async(filePath, meta, proxy) => {
+  meta = { ...meta }
+  if (!meta.APIC) {
+    delete meta.APIC
+    return writeMeta(filePath, meta)
+  }
   let picUrl = meta.APIC
   delete meta.APIC
   if (!/^http/.test(picUrl)) {
     return writeMeta(filePath, meta)
   }
-  let ext = path.extname(picUrl)
-  let picPath = filePath.replace(/\.flac$/, '') + (ext ? ext.replace(extReg, '$1') : '.jpg')
+  const picPath = `${filePath}.lxcover${getCoverExtension(picUrl)}`
 
   if (picUrl.includes('music.126.net')) picUrl += `${picUrl.includes('?') ? '&' : '?'}param=500y500`
-  download(picUrl, picPath, proxy).then(success => {
-    if (success) {
-      writeMeta(filePath, meta, picPath).finally(() => {
-        fs.unlink(picPath, err => {
-          if (err) console.log(err.message)
-        })
-      })
-    } else writeMeta(filePath, meta)
-  })
+  try {
+    await download(picUrl, picPath, proxy)
+    await writeMeta(filePath, meta, picPath)
+  } finally {
+    await fsPromises.unlink(picPath).catch(err => {
+      if (err.code !== 'ENOENT') throw err
+    })
+  }
 }
 

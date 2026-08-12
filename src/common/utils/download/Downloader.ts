@@ -72,6 +72,7 @@ class Task extends EventEmitter {
     this.progress.speed = 0
     this.dataWriteQueueLength = 0
     this.closeWaiting = false
+    this.resumeLastChunk = null
     this.__clearTimeout()
     this.__startTimeout()
     if (startByte) this.requestOptions.headers!.range = `bytes=${startByte}-${endByte}`
@@ -294,21 +295,10 @@ class Task extends EventEmitter {
       const result = this.__handleDiffChunk(chunk)
       if (result) chunk = result
       else {
-        void this.__handleStop().finally(() => {
-          // this.__handleError(new Error('Resume failed, response chunk does not match.'))
-          // Resume failed, response chunk does not match, remove file and restart download
-          console.log('Resume failed, response chunk does not match.')
-          fs.unlink(this.chunkInfo.path, (unlinkErr: any) => {
-            // this.__handleError(err)
-            this.chunkInfo.startByte = '0'
-            this.resumeLastChunk = null
-            if (unlinkErr && unlinkErr.code !== 'ENOENT') {
-              this.__handleError(unlinkErr)
-              return
-            }
-            void this.start()
-          })
-        })
+        void this.__handleStop().then(() => {
+          if (this.status == STATUS.stopped) return
+          this.__handleError(new Error('Resume failed, response chunk does not match.'))
+        }).catch(error => { this.__handleError(error) })
         return
       }
     }

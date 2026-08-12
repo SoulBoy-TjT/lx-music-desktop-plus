@@ -5,8 +5,6 @@ dd
     base-checkbox(id="setting_download_enable" :model-value="appSetting['download.enable']" :label="$t('setting__download_enable')" @update:model-value="updateSetting({'download.enable': $event})")
   .gap-top
     base-checkbox(id="setting_download_skip_exist_file" :model-value="appSetting['download.skipExistFile']" :label="$t('setting__download_skip_exist_file')" @update:model-value="updateSetting({'download.skipExistFile': $event})")
-  .gap-top
-    base-checkbox(id="setting_download_save_group_list_name" :model-value="appSetting['download.isSavePathGroupByListName']" :label="$t('setting_download_save_group_list_name')" @update:model-value="updateSetting({'download.isSavePathGroupByListName': $event})")
 dd(:aria-label="$t('setting__download_path_title')")
   h3#download_path {{ $t('setting__download_path') }}
   div
@@ -15,6 +13,14 @@ dd(:aria-label="$t('setting__download_path_title')")
       span.auto-hidden.hover(:class="$style.savePath" :aria-label="$t('setting__download_path_open_label')" @click="openDirInExplorer(appSetting['download.savePath'])") {{ appSetting['download.savePath'] }}
     .p
       base-btn.btn(min @click="handleChangeSavePath") {{ $t('setting__download_path_change_btn') }}
+
+dd(:aria-label="$t('setting__download_path_mode_title')")
+  h3#download_path_mode {{ $t('setting__download_path_mode') }}
+  div
+    base-checkbox.gap-left(
+      v-for="item in savePathModes" :id="`setting_download_savePathMode_${item.value}`" :key="item.value"
+      name="setting_download_savePathMode" :value="item.value" need :model-value="appSetting['download.savePathMode']" :label="item.name"
+      @update:model-value="updateSetting({'download.savePathMode': $event})")
 
 dd
   h3#download_max_num
@@ -107,6 +113,15 @@ export default {
         { value: '歌名 - 歌手', name: t('setting__download_name1') },
         { value: '歌手 - 歌名', name: t('setting__download_name2') },
         { value: '歌名', name: t('setting__download_name3') },
+        { value: '曲序. 艺术家 - 歌曲名', name: t('setting__download_name4') },
+      ]
+    })
+
+    const savePathModes = computed(() => {
+      return [
+        { value: 'root', name: t('setting__download_path_mode_root') },
+        { value: 'playlist', name: t('setting__download_path_mode_playlist') },
+        { value: 'album', name: t('setting__download_path_mode_album') },
       ]
     })
 
@@ -123,6 +138,7 @@ export default {
       openDirInExplorer,
       handleChangeSavePath,
       musicNames,
+      savePathModes,
       lrcFormatList,
       maxNums,
       handleUpdateMaxNum,

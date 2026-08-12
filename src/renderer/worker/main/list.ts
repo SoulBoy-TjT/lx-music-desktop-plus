@@ -4,6 +4,7 @@ import { SPLIT_CHAR } from '@common/constants'
 import { filterFileName, sortInsert, similar, arrPushByPosition, arrShuffle } from '@common/utils/common'
 import { joinPath, saveStrToFile } from '@common/utils/nodejs'
 import { createLocalMusicInfo } from '@renderer/utils/music'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 
 /**
@@ -53,7 +54,7 @@ export const filterMusicList = async({ playedList, listId, list, playerMusicInfo
   const filteredList: Array<LX.Music.MusicInfo | LX.Download.ListItem> = list.filter(s => {
     // if (!assertApiSupport(s.source)) return false
     if ('progress' in s) {
-      if (!s.isComplate) return false
+      if (!isDownloadCompleted(s)) return false
     } else if (hasDislike(s)) {
       if (s.id != playerMusicInfo?.id) return false
       isDislike = true

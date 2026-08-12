@@ -2,6 +2,8 @@ import { computed, ref, shallowReactive, reactive, nextTick } from '@common/util
 import musicSdk from '@renderer/utils/musicSdk'
 import { useI18n } from '@renderer/plugins/i18n'
 import { DOWNLOAD_STATUS } from '@common/constants'
+import { isDownloadPostProcessing } from '@renderer/store/download/postProcessState'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 export default ({
   handleStartTask,
@@ -81,8 +83,15 @@ export default ({
 
   const showMenu = (event, taskInfo) => {
     itemMenuControl.sourceDetail = !!musicSdk[taskInfo.metadata.musicInfo.source]?.getMusicDetailPageUrl
+    itemMenuControl.remove = !isDownloadPostProcessing(taskInfo)
 
-    if (taskInfo.isComplate) {
+    if (isDownloadPostProcessing(taskInfo)) {
+      itemMenuControl.play =
+      itemMenuControl.playLater =
+        itemMenuControl.start =
+        itemMenuControl.pause = false
+      itemMenuControl.file = false
+    } else if (isDownloadCompleted(taskInfo)) {
       itemMenuControl.play =
         itemMenuControl.playLater =
         itemMenuControl.file = true

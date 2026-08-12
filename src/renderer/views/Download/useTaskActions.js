@@ -8,6 +8,7 @@ import { checkPath } from '@common/utils/nodejs'
 import { toOldMusicInfo } from '@renderer/utils/index'
 import { startDownloadTasks, pauseDownloadTasks, removeDownloadTasks } from '@renderer/store/download/action'
 import { openDirInExplorer } from '@renderer/utils/ipc'
+import { isDownloadCompleted } from '@common/utils/downloadTask'
 
 export default ({ list, selectedList, removeAllSelect }) => {
   const router = useRouter()
@@ -33,19 +34,19 @@ export default ({ list, selectedList, removeAllSelect }) => {
 
   const handleStartTask = async(index, single) => {
     if (selectedList.value.length && !single) {
-      startDownloadTasks([...selectedList.value])
+      await startDownloadTasks([...selectedList.value])
       removeAllSelect()
     } else {
-      startDownloadTasks([list.value[index]])
+      await startDownloadTasks([list.value[index]])
     }
   }
 
   const handlePauseTask = async(index, single) => {
     if (selectedList.value.length && !single) {
-      pauseDownloadTasks([...selectedList.value])
+      await pauseDownloadTasks([...selectedList.value])
       removeAllSelect()
     } else {
-      pauseDownloadTasks([list.value[index]])
+      await pauseDownloadTasks([list.value[index]])
     }
   }
 
@@ -59,15 +60,16 @@ export default ({ list, selectedList, removeAllSelect }) => {
       //   : Promise.resolve(true)
       // )
       // if (!confirm) return
-      removeDownloadTasks(selectedList.value.map(m => m.id))
+      await removeDownloadTasks(selectedList.value.map(m => m.id))
       removeAllSelect()
     } else {
-      removeDownloadTasks([list.value[index].id])
+      await removeDownloadTasks([list.value[index].id])
     }
   }
 
   const handleOpenFile = async(index) => {
     const task = list.value[index]
+    if (!isDownloadCompleted(task)) return
     if (!checkPath(task.metadata.filePath)) return
     openDirInExplorer(task.metadata.filePath)
   }
