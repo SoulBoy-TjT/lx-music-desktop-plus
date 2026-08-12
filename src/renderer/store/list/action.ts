@@ -72,7 +72,7 @@ export const createUserList = async({ name, id = `userlist_${Date.now()}`, list 
       },
     ],
   })
-  if (list) await addListMusics(id, list)
+  if (list.length) await addListMusics(id, list)
 }
 
 

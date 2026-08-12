@@ -1,0 +1,41 @@
+export { createArtistDiscographyModule } from './module'
+export { assembleDiscographyTracks } from './assembly'
+export {
+  ARTIST_DISCOGRAPHY_PLAYLIST_SUFFIXES,
+  ARTIST_DISCOGRAPHY_SOURCES,
+  createArtistDiscographyBatchModule,
+  createArtistDiscographyPlaylistName,
+  createArtistDiscographyPlaylistNames,
+} from './batch'
+export { DiscographyError } from './types'
+export type {
+  AlbumRef,
+  ArtistCatalogPort,
+  ArtistDiscographyModule,
+  ArtistDiscographyModuleOptions,
+  ArtistDiscographyBatchModule,
+  ArtistDiscographyBatchModuleOptions,
+  ArtistDiscographySource,
+  ArtistRef,
+  CatalogCollection,
+  DiscographyAlbumPlan,
+  DiscographyAlbumStatus,
+  DiscographyBatchApplyInput,
+  DiscographyBatchApplyResult,
+  DiscographyBatchPlan,
+  DiscographyBatchPlanInput,
+  DiscographyBatchPlanProgress,
+  DiscographyApplyInput,
+  DiscographyApplyResult,
+  DiscographyApplyTarget,
+  DiscographyIssue,
+  DiscographyIssueCode,
+  DiscographyIssueStage,
+  DiscographyPlan,
+  DiscographyPlanInput,
+  DiscographyPlanProgress,
+  DiscographyPlanStatus,
+  DiscographyTrackDeduplication,
+  DiscographyTrackOccurrence,
+  PlaylistPort,
+} from './types'

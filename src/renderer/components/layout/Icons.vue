@@ -119,6 +119,13 @@
         <path d="M317.24,241.35a18,18,0,0,1-12.76-5.29l-58.26-58.26a18,18,0,0,1,25.52-25.52L330,210.55a18,18,0,0,1-12.76,30.81Z" />
         <path d="M223.08,360.18A53.95,53.95,0,1,1,277,306.23,54,54,0,0,1,223.08,360.18Zm0-71.8a17.85,17.85,0,1,0,17.85,17.85A17.87,17.87,0,0,0,223.08,288.38Z" />
       </g>
+      <g id="icon-album-search" fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="47" y="53" width="252" height="310" rx="24" />
+        <circle cx="173" cy="207" r="72" />
+        <circle cx="173" cy="207" r="15" fill="currentColor" stroke="none" />
+        <circle cx="326" cy="307" r="52" />
+        <path d="M364 345l43 43" />
+      </g>
       <g id="icon-leaderboard" fill="currentColor">
         <!-- 0 0 805.65 805.58-->
         <path d="M402.08,379.18H23a23,23,0,0,0,0,46H402.08a23,23,0,0,0,0-46Z" />

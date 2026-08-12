@@ -74,6 +74,15 @@ export default {
           name: 'Download',
         },
         {
+          to: '/album-collection',
+          tips: t('album_collection'),
+          icon: '#icon-album-search',
+          iconSize: '0 0 425.2 425.2',
+          size,
+          enable: true,
+          name: 'AlbumCollection',
+        },
+        {
           to: '/setting',
           tips: t('setting'),
           icon: '#icon-setting',

@@ -55,6 +55,16 @@ const router = createRouter({
       },
     },
     {
+      path: '/album-collection',
+      name: 'AlbumCollection',
+      component: require('./views/Tools/index.vue').default,
+      meta: { name: 'AlbumCollection', keepAlive: true },
+    },
+    {
+      path: '/tools',
+      redirect: '/album-collection',
+    },
+    {
       path: '/setting',
       name: 'Setting',
       component: require('./views/Setting/index.vue').default,

@@ -5,6 +5,11 @@ export const toNewMusicInfo = (oldMusicInfo: any): LX.Music.MusicInfo => {
     songId: oldMusicInfo.songmid, // 歌曲ID，local为文件路径
     albumName: oldMusicInfo.albumName, // 歌曲专辑名称
     picUrl: oldMusicInfo.img, // 歌曲图片链接
+    discographyArtist: oldMusicInfo.discographyArtist,
+    albumArtist: oldMusicInfo.albumArtist,
+    releaseDate: oldMusicInfo.releaseDate,
+    trackNumber: oldMusicInfo.trackNumber,
+    trackTotal: oldMusicInfo.trackTotal,
   }
   const newInfo = {
     id: `${oldMusicInfo.source}_${oldMusicInfo.songmid}`,
@@ -63,6 +68,11 @@ export const toOldMusicInfo = (minfo: LX.Music.MusicInfo) => {
     interval: minfo.interval,
     albumName: minfo.meta.albumName,
     img: minfo.meta.picUrl ?? '',
+    discographyArtist: minfo.meta.discographyArtist,
+    albumArtist: minfo.meta.albumArtist,
+    releaseDate: minfo.meta.releaseDate,
+    trackNumber: minfo.meta.trackNumber,
+    trackTotal: minfo.meta.trackTotal,
     typeUrl: {},
   }
   if (minfo.source == 'local') {
@@ -149,6 +159,7 @@ export const clipFileNameLength = (name: string) => {
 }
 
 export const formatMusicName = (format: string, name: string, singer: string) => {
+  if (format == '曲序. 艺术家 - 歌曲名') format = '歌名 - 歌手'
   // return format.replace(/歌名|歌手/g, match => match === '歌名' ? name : singer)
   return format.replace('歌手', singer).replace('歌名', name)
 }
