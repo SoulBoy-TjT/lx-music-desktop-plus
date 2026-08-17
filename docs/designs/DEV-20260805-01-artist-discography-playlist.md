@@ -4,7 +4,7 @@ type: DEV
 title: 歌手专辑目录组装技术方案
 status: implemented
 created_at: 2026-08-05
-updated_at: 2026-08-09
+updated_at: 2026-08-17
 owner: KhalilFong
 req_ids:
   - REQ-20260805-01
@@ -12,6 +12,7 @@ biz_ids:
   - BIZ-20260805-01
   - BIZ-20260807-01
   - BIZ-20260809-02
+  - BIZ-20260817-01
 bug_ids:
   - BUG-20260805-01
   - BUG-20260805-02
@@ -30,6 +31,8 @@ supersedes: []
 ---
 
 # 歌手专辑目录组装技术方案
+
+> 2026-08-17 起，[BIZ-20260817-01](../decisions/BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md) 将最终来源组装改为只保留已确认歌手参与的曲目；完整详情校验、Provider adapter 与逐专辑完整性证据保持不变。四来源共享实现以 [DEV-20260809-01](DEV-20260809-01-four-source-artist-discography-playlists.md) 的阶段 15 为准。
 
 ## 关联文档
 

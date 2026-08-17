@@ -60,7 +60,7 @@ const makePlan = (
   albums: DiscographyAlbumPlan[],
   status: DiscographyPlan['status'] = 'complete',
 ): DiscographyPlan => {
-  const assembled = assembleDiscographyTracks(albums)
+  const assembled = assembleDiscographyTracks(albums, 'Artist')
   return {
     source: 'kg',
     status,
@@ -137,7 +137,7 @@ describe('artist discography apply interface', () => {
     ])
     const albumC = makeAlbumPlan('c', [makeTrack('shared', 'c', 'Shared from C')])
     const plan = makePlan([albumA, albumB, albumC])
-    const selectedAssembly = assembleDiscographyTracks([albumB, albumC])
+    const selectedAssembly = assembleDiscographyTracks([albumB, albumC], 'Artist')
     const input = {
       plan,
       albumIds: ['c', 'b'],

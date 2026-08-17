@@ -985,7 +985,7 @@
   "tools__discography_progress_complete": "專輯詳情取得結束：{completed} / {total}",
   "tools__discography_progress_tracks": "正在取得專輯完整曲目：{completed} / {total}",
   "tools__discography_progress_waiting": "等待開始…",
-  "tools__discography_raw_tracks": "專輯內有效歌曲合計",
+  "tools__discography_raw_tracks": "目標歌手參與歌曲合計",
   "tools__discography_residual_list": "補償刪除失敗，殘留歌單 ID：{id}。請到本地歌單中檢查。",
   "tools__discography_select_all": "全選",
   "tools__discography_select_none": "取消全選",

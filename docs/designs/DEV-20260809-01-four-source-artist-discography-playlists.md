@@ -4,7 +4,7 @@ type: DEV
 title: 四平台歌手专辑抓取与批量写入技术方案
 status: implemented
 created_at: 2026-08-09
-updated_at: 2026-08-11
+updated_at: 2026-08-17
 owner: KhalilFong
 req_ids:
   - REQ-20260809-01
@@ -16,6 +16,7 @@ biz_ids:
   - BIZ-20260809-05
   - BIZ-20260810-01
   - BIZ-20260810-02
+  - BIZ-20260817-01
 bug_ids:
   - BUG-20260805-02
   - BUG-20260805-03
@@ -38,6 +39,7 @@ supersedes: []
 - 业务决策修订：[BIZ-20260809-05 部分结果直接写入与去重核查字段精简](../decisions/BIZ-20260809-05-partial-direct-apply-and-dedup-summary.md)
 - 业务决策修订：[BIZ-20260810-01 来源歌单名称包含最终歌曲数量](../decisions/BIZ-20260810-01-playlist-name-with-track-count.md)
 - 业务决策修订：[BIZ-20260810-02 来源子集选择与歌手别名身份确认](../decisions/BIZ-20260810-02-source-subset-and-artist-alias-confirmation.md)
+- 业务决策修订：[BIZ-20260817-01 专辑抓取仅组装已确认歌手参与的歌曲](../decisions/BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md)
 - 输入交互背景：[BIZ-20260809-02 工具页面采用歌手名称输入、可选来源目录与独立图标](../decisions/BIZ-20260809-02-tool-input-directory-and-icons.md)
 - 既有技术方案：[DEV-20260805-01 歌手专辑目录组装技术方案](DEV-20260805-01-artist-discography-playlist.md)
 - 关联缺陷（状态由各 BUG 文档独立维护）：
@@ -194,7 +196,9 @@ interface DiscographyTrackDeduplication {
 }
 ```
 
-`src/renderer/core/artistDiscography/assembly.ts` 按合法专辑及曲目的稳定遍历顺序组装来源歌曲，以 `track.id` 为键保留首次出现项，并为每个被移除项生成 `DiscographyTrackDeduplication`。`DiscographyPlan.deduplications` 保存精确结果；plan 和 apply 都调用 `assembleDiscographyTracks`，确保预览与实际写入使用同一首次出现规则。记录只属于单一 `source`，协调层不得建立跨来源核查记录。
+`src/renderer/core/artistDiscography/assembly.ts` 接收该来源已确认的 `ArtistRef.name`，按合法专辑及曲目的稳定遍历顺序先筛选歌手参与曲目，再以 `track.id` 为键保留首次出现项，并为每个被移除的重复项生成 `DiscographyTrackDeduplication`。`DiscographyPlan.deduplications` 保存精确结果；plan 和 apply 都调用 `assembleDiscographyTracks`，确保预览计数、名称数量与实际写入使用同一筛选及首次出现规则。记录只属于单一 `source`，协调层不得建立跨来源核查记录。
+
+歌手参与匹配使用独立纯函数：先按联合艺术家分隔符拆分 `track.singer`，再对确认歌手和各候选项执行 NFKC、大小写与常见标点规范化并做完整项相等比较；中文确认名允许与携带连续拉丁别名前后缀的显示名匹配。该函数不得使用普通 `includes`。筛选只影响 assembly 输出，`DiscographyAlbumPlan.tracks/actualCount/status` 继续保存筛选前完整详情和完整性证据，因此正常筛除不会制造 `album_incomplete`。
 
 上述 occurrence 中的 `albumPosition/trackPosition/occurrencePosition` 继续作为内部确定性上下文，但 `BIZ-20260809-05` 禁止 UI 和复制文本展示这些位置。`preview.ts` 应映射为精简视图：平台、去重类型、歌曲/歌手、一个稳定 ID 或 Provider ID，以及保留/移除项各自的专辑名称、albumId、曲序；稳定 ID 可用时不再并列 Provider song ID，也不在双方重复同一 Provider ID。
 
@@ -252,11 +256,11 @@ interface DiscographyBatchPlan {
 
 1. 属于 `plan.sources`，且已完成身份确认和目录计划。
 2. 状态为 `complete` 或 `partial`。
-3. 计划有合法歌手、至少一张合法专辑，并在最终来源内去重后至少一首歌曲。
+3. 计划有合法歌手、至少一张合法专辑，并在歌手参与筛选及最终来源内去重后至少一首歌曲。
 
 `failed`、`cancelled` 或 0 首来源不进入默认生成选择，但不使其他合格来源失去资格。`status` 继续描述完整抓取来源集合：所有请求来源均为 `complete/partial` 时为 `ready`，存在 `failed` 或缺项时为 `blocked`，共享取消为 `cancelled`。`canApply` 独立表示至少一个来源可生成，因此允许出现 `status='blocked'` 且 `canApply=true`；UI 和 core 此时仍可对合格非空 `apply.sources` 创建歌单。全部来源不合格时 `canApply=false`。
 
-UI 的实际可创建状态由 `plan.canApply`、`apply.sources` 非空且每个来源满足上述条件共同推导。`apply` 使用计划内容再次验证每个选中来源全部合法专辑均产生非空歌曲；状态为 `partial` 不再要求授权。计划和 UI 均不存在 `acceptedPartialSources`、`allowIncompleteBySource` 或用户专辑选择。
+UI 的实际可创建状态由 `plan.canApply`、`apply.sources` 非空且每个来源满足上述条件共同推导。`apply` 使用计划内容再次验证每个选中来源的全部合法专辑经歌手参与筛选及来源内去重后均产生非空歌曲集合；状态为 `partial` 不再要求授权。计划和 UI 均不存在 `acceptedPartialSources`、`allowIncompleteBySource` 或用户专辑选择。
 
 ## adapter registry
 
@@ -306,10 +310,10 @@ QQ 和网易 adapter 的实现必须在新的隔离目录 adapter 内修复 `BUG
 3. 每个无严格身份匹配、请求失败或返回非法身份的来源生成带根因的 `failed` 计划；成功 `ArtistRef` 暂存在 waiter。单个失败只标记该来源 arrived，不得提前结束其他身份请求，也不得阻断成功子集。
 4. 全部来源 arrived 后，如果 waiter 为空，直接返回 `blocked`，不得调用 `confirmArtists` 或任何专辑接口；非空时按固定来源顺序把 `ArtistRef[]` 传给一次 `confirmArtists`。回调返回 `false`、抛错或共享信号取消时，所有等待中的成功来源都不开始专辑请求。
 5. 用户确认后释放成功来源 waiter 并继续这些单来源计划；第 3 步的身份失败计划原样保留在 `plans` 中。
-6. 单来源内部沿用既有流程：专辑分页顺序获取，逐专辑详情最大并发 3，详情曲目成稿，来源内校验和去重；早期 duplicate 继续记录 issue 标识符。
-7. `assembly.ts` 按合法专辑的稳定遍历顺序汇总歌曲，以稳定 `track.id` 保留首次出现项，并为每个移除项生成精确 `source_assembly` 核查记录。
+6. 单来源内部沿用既有流程：专辑分页顺序获取，逐专辑详情最大并发 3，详情曲目完整成稿并先完成来源内字段、归属、声明曲数及分页校验；早期 duplicate 继续记录 issue 标识符。
+7. `assembly.ts` 使用该来源已确认的 `ArtistRef.name`，按合法专辑的稳定遍历顺序先排除没有目标歌手参与的曲目，再以稳定 `track.id` 保留首次出现项，并为每个移除的重复项生成精确 `source_assembly` 核查记录。筛选不重排 `trackNumber`，`rawTrackCount` 统计筛选后、来源内去重前的歌曲数。
 8. 将逐专辑异常聚合为来源级完整性说明，汇总已抓取来源状态，但不生成跨来源专辑或歌曲集合。
-9. 根据每个请求来源的状态、合法歌手、全部合法专辑和最终歌曲是否非空计算逐来源 `plan.canApply`；batch `canApply` 为其中任一项为真。非空 `partial` 直接合格，身份解析失败、目录 `failed/cancelled/0 首` 只排除该来源。batch `status` 仍按全部请求来源汇总，因此单个 `failed` 可使 `status='blocked'`，但只要 `canApply=true`，生成子集仍可写入。
+9. 根据每个请求来源的状态、合法歌手、全部合法专辑和参与筛选及去重后的最终歌曲是否非空计算逐来源 `plan.canApply`；batch `canApply` 为其中任一项为真。非空 `partial` 直接合格，身份解析失败、目录 `failed/cancelled/0 首` 只排除该来源。batch `status` 仍按全部请求来源汇总，因此单个 `failed` 可使 `status='blocked'`，但只要 `canApply=true`，生成子集仍可写入。
 
 并发边界：
 
@@ -345,8 +349,8 @@ QQ 和网易 adapter 的实现必须在新的隔离目录 adapter 内修复 `BUG
 
 1. 重新验证计划属于当前 `batchId`，先校验 `apply.sources` 无重复，再按稳定来源顺序归一；零项、未知来源、未抓取来源或重复输入立即返回 `validation_failed`。
 2. 每个选中来源必须满足 `canGenerateDiscographyPlaylist` 的同等核心条件，状态为 `complete/partial` 且 `plan.canApply=true`；不读取任何不完整结果授权。未选来源即使 `failed/cancelled/0 首` 也不进入 apply 校验。
-3. 验证每个选中来源的全部合法 albumId 属于本来源快照，并分别按稳定 `track.id` 生成非空歌曲集合；不接受专辑子集，选中来源 0 首即阻断。
-4. 对每个选中来源取得最终去重后的实际提交歌曲数组长度 `N`，由 `artistName`、来源展示名和 `N` 生成无空格目标名称“`<artistName>-<platform>-<N>首`”。
+3. 验证每个选中来源的全部合法 albumId 属于本来源快照，并分别按已确认歌手参与条件筛选、再按稳定 `track.id` 生成非空歌曲集合；不接受专辑子集，选中来源 0 首即阻断。
+4. 对每个选中来源取得参与筛选并去重后的实际提交歌曲数组长度 `N`，由 `artistName`、来源展示名和 `N` 生成无空格目标名称“`<artistName>-<platform>-<N>首`”。
 5. UI 只查询选中目标的同名本地歌单并统一提示；取消时不调用 `apply`，确认时核心仍只创建新 ID。
 
 ### 确定性写入与补偿
@@ -354,7 +358,7 @@ QQ 和网易 adapter 的实现必须在新的隔离目录 adapter 内修复 `BUG
 为降低并发写入和补偿竞态，歌单按固定顺序 `kg -> tx -> wy -> kw` 过滤 `apply.sources` 后写入；抓取并行不要求持久化也并行。
 
 1. 只为 `apply.sources` 预生成唯一歌单 ID，并记录 `{ source, id, name, created, tracksAdded }`；`name` 中的数量等于该来源随后提交的歌曲数组长度。
-2. 依次创建选中来源新歌单并添加该来源全部合法专辑经稳定 `track.id` 去重后的歌曲；未选来源不调用创建或加歌 action。
+2. 依次创建选中来源新歌单并添加该来源全部合法专辑中经歌手参与筛选、再按稳定 `track.id` 去重后的歌曲；未选来源不调用创建或加歌 action。
 3. 任一阶段失败，停止后续写入，并按创建顺序的逆序删除本批次所有 `created` 歌单。
 4. 所有删除成功时返回 `failed_rolled_back`，且 `residualPlaylists` 为空。
 5. 任一删除失败时继续尝试其余删除，最终返回 `failed_with_residuals` 及完整残留 `{ source, id, name }[]`。
@@ -422,7 +426,7 @@ idle
 - 中文名、拉丁名、完整展示名、汉字/拉丁双脚本完整名称段、严格匹配结果稳定顺序、模糊结果拒绝和空结果。
 - 网易固定样例按 Provider 顺序同时包含“刘雨昕XIN LIU”在前、完全同名错误艺人在后，断言一次顺序扫描选择前者；反转顺序时选择新的首个严格合法结果。“刘雨”、任意包含、近似名和拼音推断必须拒绝。
 - 歌手身份、专辑列表和逐专辑详情的第 1 页、中间页、末页。
-- 详情完整曲目、合作歌曲、同名不同 albumId、重复歌曲 ID 和缺失稳定字段。
+- 详情完整曲目、目标歌手独唱与合作歌曲、其他歌手独唱、相似名称子串、中文名携带拉丁别名、同名不同 albumId、重复歌曲 ID 和缺失稳定字段；断言筛选发生在完整性校验之后及稳定 ID 去重之前。
 - Provider 专辑分页与专辑详情内的重复项保留 issue 标识符；预览回退只使用 issue 与最终保留快照，并对不可恢复字段保持缺失。
 - 超时、失败、空数据、非法响应、重复页、total 漂移、有限重试、限流和取消。
 - 合法 `MusicInfoOnline` 映射及来源特有播放元数据保留。
@@ -441,7 +445,7 @@ QQ 专题必须覆盖 `BUG-20260805-03` 的子响应 `.code`、独立统计、�
 - 所选来源计划独立，跨来源相同 ID 或名称不去重。
 - 所选平台并行进度可定位，整批取消停止所有所选来源新请求。
 - 整批重试使用新 batchId，旧结果和迟到事件不能提交。
-- 非空 `partial` 无需授权即可使该来源 `plan.canApply=true`；failed、cancelled 或全部合法专辑无合法歌曲只排除该来源，全部不合格才使 batch `canApply=false`。
+- 非空 `partial` 无需授权即可使该来源 `plan.canApply=true`；failed、cancelled 或全部合法专辑经歌手参与筛选后无合法歌曲只排除该来源，全部不合格才使 batch `canApply=false`。
 - batch apply 自动为每个来源使用全部合法专辑，调用方不能提交专辑子集。
 - 同一来源最终歌曲按稳定 `track.id` 保留首次出现项并输出精简核查字段；跨来源相同 ID 或名称不去重。
 - 生成来源初始默认全选全部合格项；任意非空子集可 apply，零项、未抓取项、不合格项或重复项在写入前拒绝，切换该选择不增加 Provider 调用。
@@ -564,7 +568,7 @@ npm run build:renderer
 - [x] 新建并接受 `BIZ-20260810-01`，同步被修订 BIZ、REQ、DEV、CONTEXT、当日 PROG 和 README。
 - [x] 提供共享的目标名称生成规则，严格输出“`<输入歌手名>-<酷狗|qq|网易|酷我>-<N>首`”。
 - [x] 让目标名称预览、同名检查、core 实际创建和补偿失败残留报告使用同一名称。
-- [x] 由 apply 时最终去重后的实际提交数组长度计算 `N`，保持 0 首阻断并防止旧计划或 UI 数量漂移。
+- [x] 由 apply 时歌手参与筛选并最终去重后的实际提交数组长度计算 `N`，保持 0 首阻断并防止旧计划或 UI 数量漂移。
 - [x] 补充四来源不同曲数、去重后计数、同名冲突、0 首阻断和补偿残留名称回归，并执行专题测试、Renderer TypeScript、定向 ESLint 及 Renderer 构建。
 
 ### 阶段 11：严格别名顺序匹配与两阶段来源子集
@@ -598,6 +602,14 @@ npm run build:renderer
 - [x] 在校验完整专辑原始序列后，将严格连续且与响应位置一致的 `0..N-1` 整体规范化为 `1..N`；不按成功映射后的剩余歌曲重新编号。
 - [x] 保持可靠一基连续序列和一基中间缺口原样，非连续零基、负数、非整数、非数字及其他必需字段继续严格拒绝。
 - [x] 复跑酷我 mapper/adapter、全专题、Renderer TypeScript、定向 ESLint 和生产构建，执行真实只读复现，并重新构建和静态核对 Windows x64 NSIS 安装包。
+
+### 阶段 15：只组装已确认歌手参与的歌曲
+
+- [x] 新建并接受 `BIZ-20260817-01`，同步被修订 BIZ、REQ、DEV、CONTEXT 和 README。
+- [x] 增加联合艺术家拆分及规范化精确匹配纯函数，覆盖中文名拉丁别名且拒绝任意子串。
+- [x] 让 plan/apply 共用的 `assembleDiscographyTracks` 在去重前筛选，并保持完整 album plan、原曲序和完整性状态不变。
+- [x] 补充 assembly、plan、apply、batch 回归，验证预览数量、名称数量和实际提交数组一致，筛选后 0 首来源继续阻断。
+- [x] 执行专题测试、Renderer TypeScript、定向/全量 ESLint、Renderer 生产构建和最终差异检查；真实 Electron 与安装态边界据实记录。
 
 ## 实现与验证记录
 
@@ -678,6 +690,20 @@ npm run build:renderer
 - 真实只读 adapter 抓取《醇情歌》（albumId `65066`）：声明 19 首、实际 19 首、`complete=true`、曲序 `1..19`，首曲 `kw_40358244 / 爱就是你 / 曲序 1`，`issues=[]`；临时验证文件已删除。
 - 使用 `LX_SKIP_WIN_EXECUTABLE_EDIT=true` 完整执行 `npm run pack`，退出码 0、总耗时 83 秒，四套 production webpack 成功，production build 耗时 39.669 秒。新安装包及 ASAR 已静态确认包含酷我 `trackNumbering/rawOffset/zero_based/completeZeroBasedSequence` 跨页实现；安装器未运行，真实 Electron 页面和实际下载未人工验收。
 
+2026-08-17 阶段 15 实现与验证：
+
+- 新增 `artistParticipation.ts`，参照 `easy-music` 对联合艺术家进行独立名称项拆分、NFKC/大小写/标点规范化和精确匹配；支持中文名携带连续拉丁别名前后缀，明确拒绝普通子串。
+- `assembleDiscographyTracks` 在来源内稳定 ID 去重之前筛除非目标歌手曲目，plan 与 apply 均传入该来源已确认的 `ArtistRef.name`；筛选不修改 `DiscographyAlbumPlan.tracks/actualCount/status`、原曲序或 `trackTotal`。
+- 首轮定向回归按预期因缺少 matcher、组装计数及 plan/batch 行为不符失败；实现并补齐筛选后 0 首来源边界后，定向 5 个文件 68 项全部通过。最终专题为 56 个文件通过、1 个文件跳过，491 项通过、1 项跳过（共 492 项）。
+- Renderer TypeScript、变更文件定向 ESLint、全量 `npm run lint` 均退出 0；最终状态的 `npm run build:renderer` 成功，webpack production 编译耗时 43.816 秒。真实 Electron 页面、四来源实时抓取、歌单实际创建和安装态未执行。
+
+2026-08-17 阶段 15 Windows x64 NSIS 构建与静态验包：
+
+- 使用 `LX_SKIP_WIN_EXECUTABLE_EDIT=true` 执行 `npm run pack`，退出码 0；四套 production webpack、Electron 40.9.2 x64 原生依赖重建和 NSIS 封装均成功。Setup 为 142,764,193 bytes，SHA-256 为 `0F815B601840D8339BDE61D66C0B7F24C915E77A760FA584CB1C9A4B797CBB05`；blockmap 为 150,306 bytes，SHA-256 为 `8CE065FDCC4A18DD089EE949FCACE0AE2A769D290F7DCD8CB2F48668990CB2D8`。
+- `latest.yml` 的 path、size 和两处 SHA-512 `lymwrdksI04bS+lnXmyg4A+7oHw69b0pXOkhtPgzAwZiiwumNu1KOiIs+INLPENkINHmeYltUydB14q3m9xKxw==` 一致；`7za t` 返回 `Everything is Ok`，仅有标准 NSIS tail warning。`app.asar` 为 34,190,609 bytes，SHA-256 为 `B9ADB1403B7F491C902EA0BA090518B142DAF738A2A17656A2C7681245436B2C`，metadata 正确。
+- 包内 Renderer 与本地 production bundle 完全一致，SHA-256 均为 `F8167A81B9A5A66CBBBBCC43AE248FE1E2D0840E5BEA0142C58C4C0C3D964A4F`；源码图包含 `artistParticipation.ts` 与 `isArtistParticipation`，包内包含中英文目标歌手参与歌曲计数文案，证明阶段 15 实现已入包。
+- 随包 FFmpeg 和许可证存在；Electron 40.9.2 / ABI 143 / win32 x64 下 better-sqlite3 内存 `select 1` 与 qrc_decode 导出函数验证通过。Setup 与 unpacked exe 均为 `NotSigned`；安装器、安装态启动和真实四来源功能仍未执行。
+
 2026-08-10 Windows x64 NSIS 安装包构建验证：
 
 - 初次执行 `npm run pack` 时四个 production webpack 均成功，随后 winCodeSign cache 解压因当前 Windows 账号无 symlink 权限失败；该次执行不作为安装包成功证据。
@@ -694,7 +720,7 @@ npm run build:renderer
 - `7za t` 为 `Everything is Ok`；`app.asar` 为 33,386,895 bytes，SHA-256 为 `510165DF3F2CF0F26B0371501B41C1DB069CB70A97B15353685D0FCFCA8AC087`，metadata 为 `lx-music-desktop` / `2.12.2` / `./dist/main.js`。源码图确认包含酷我封面 normalizer、可信 host、pathname 起点约束及 `/500/` replacement。
 - FFmpeg、LICENSE、NOTICE 和 native 模块均存在；打包 Electron 40.9.2 下 better-sqlite3 `select 1` 与 qrc_decode 导出验证通过。安装包为 `NotSigned`，未运行安装器，也未执行安装态或真实 Electron 新下载封面读回。
 
-`BIZ-20260810-02` 已完成生产实现和定向验证，`BUG-20260810-01`、`BUG-20260810-02`、`BUG-20260810-03` 与 `BUG-20260811-01` 均已更新为 `verified`。阶段 14 的生产实现、离线回归、真实只读复现、生产构建和安装包静态内容验证已经完成，本 DEV 收口为 `implemented`；真实 Electron 页面、实际下载和安装态验证仍不在本结论内。
+`BIZ-20260810-02` 已完成生产实现和定向验证，`BUG-20260810-01`、`BUG-20260810-02`、`BUG-20260810-03` 与 `BUG-20260811-01` 均已更新为 `verified`。阶段 14 的生产实现、离线回归、真实只读复现、生产构建和安装包静态内容验证已经完成；阶段 15 的歌手参与筛选、离线回归、Windows x64 NSIS 构建和静态验包也已完成，本 DEV 保持 `implemented`。真实 Electron 页面、实际四来源抓取、歌单创建和安装态验证仍不在本结论内。
 
 ## 兼容性、回滚与降级
 

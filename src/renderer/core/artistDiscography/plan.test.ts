@@ -71,7 +71,7 @@ const noOpPlaylist: PlaylistPort = {
 }
 
 describe('artist discography plan interface', () => {
-  it('always loads each distinct album detail and keeps non-artist album tracks', async() => {
+  it('validates complete album details before excluding non-participating tracks from source assembly', async() => {
     const albums = [
       { ...makeAlbum('a', 2, 'Same name'), releaseDate: '2020-01-02' },
       makeAlbum('b', 2, 'Same name'),
@@ -116,6 +116,12 @@ describe('artist discography plan interface', () => {
     expect(plan.albums.map(item => item.album.id)).toEqual(['a', 'b'])
     expect(plan.albums.map(item => item.album.name)).toEqual(['Same name', 'Same name'])
     expect(plan.albums[0].tracks[1].singer).toBe('Guest singer')
+    expect(plan.albums.map(item => item.status)).toEqual(['complete', 'complete'])
+    expect(plan.albums.map(item => item.actualCount)).toEqual([2, 2])
+    expect(plan.tracks.map(track => track.id)).toEqual(['a1', 'b1', 'b2'])
+    expect(plan.rawTrackCount).toBe(3)
+    expect(plan.deduplicatedTrackCount).toBe(3)
+    expect(plan.issues).not.toContainEqual(expect.objectContaining({ code: 'album_incomplete' }))
     expect(plan.albums[0].tracks.map(track => track.meta)).toMatchObject([
       { discographyArtist: 'Artist', albumArtist: 'Artist', releaseDate: '2020-01-02', trackNumber: 1, trackTotal: 2 },
       { discographyArtist: 'Artist', albumArtist: 'Artist', releaseDate: '2020-01-02', trackNumber: 2, trackTotal: 2 },
@@ -135,6 +141,28 @@ describe('artist discography plan interface', () => {
       completed: 2,
       total: 2,
     })
+  })
+
+  it('blocks a complete nonempty album when every track is excluded by artist participation', async() => {
+    const catalog: ArtistCatalogPort = {
+      resolveArtist: async() => ({ ...artist, albumCount: 1 }),
+      getArtistAlbums: async() => collection([makeAlbum('a', 2)]),
+      getAlbumTracks: async() => collection([
+        makeTrack('a1', 'a', 'Other singer'),
+        makeTrack('a2', 'a', 'Artist Studio'),
+      ]),
+    }
+    const module = createArtistDiscographyModule({ catalog, playlist: noOpPlaylist })
+
+    const plan = await module.plan({ source: 'kg', artistRef: artist.id })
+
+    expect(plan.status).toBe('failed')
+    expect(plan.canApply).toBe(false)
+    expect(plan.tracks).toEqual([])
+    expect(plan.rawTrackCount).toBe(0)
+    expect(plan.albums[0]).toMatchObject({ status: 'complete', actualCount: 2 })
+    expect(plan.issues).toContainEqual(expect.objectContaining({ code: 'empty_catalog' }))
+    expect(plan.issues).not.toContainEqual(expect.objectContaining({ code: 'album_incomplete' }))
   })
 
   it('validates albums before globally folding the same stable track ID', async() => {

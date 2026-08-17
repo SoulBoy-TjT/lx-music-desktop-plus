@@ -55,18 +55,18 @@ const makeAlbum = (
 describe('assembleDiscographyTracks', () => {
   it('keeps the first A/B/C occurrence and records both removals with stable order details', () => {
     const albumA = makeAlbum('a', 'Album Artist A', [
-      makeTrack('shared', 'a', 101, 'Shared from A', 'Singer A', 7),
-      makeTrack('unique-a', 'a', 201, 'Same Name', 'Singer A'),
+      makeTrack('shared', 'a', 101, 'Shared from A', 'Target Artist', 7),
+      makeTrack('unique-a', 'a', 201, 'Same Name', 'Target Artist、Singer A'),
     ])
     const albumB = makeAlbum('b', 'Album Artist B', [
-      makeTrack('unique-b', 'b', 202, 'Same Name', 'Singer B', 1),
-      makeTrack('shared', 'b', 102, 'Shared from B', 'Singer B', 2),
+      makeTrack('unique-b', 'b', 202, 'Same Name', 'Singer B、Target Artist', 1),
+      makeTrack('shared', 'b', 102, 'Shared from B', 'Target Artist & Singer B', 2),
     ])
     const albumC = makeAlbum('c', 'Album Artist C', [
-      makeTrack('shared', 'c', 103, 'Shared from C', 'Singer C', 3),
+      makeTrack('shared', 'c', 103, 'Shared from C', 'Target Artist feat. Singer C', 3),
     ])
 
-    const result = assembleDiscographyTracks([albumA, albumB, albumC])
+    const result = assembleDiscographyTracks([albumA, albumB, albumC], 'Target Artist')
 
     expect(result.rawTrackCount).toBe(5)
     expect(result.tracks.map(track => [track.id, track.name])).toEqual([
@@ -85,7 +85,7 @@ describe('assembleDiscographyTracks', () => {
         trackId: 'shared',
         providerSongId: 101,
         trackName: 'Shared from A',
-        singer: 'Singer A',
+        singer: 'Target Artist',
         albumId: 'a',
         albumName: 'Album A',
         albumArtist: 'Album Artist A',
@@ -99,7 +99,7 @@ describe('assembleDiscographyTracks', () => {
         trackId: 'shared',
         providerSongId: 102,
         trackName: 'Shared from B',
-        singer: 'Singer B',
+        singer: 'Target Artist & Singer B',
         albumId: 'b',
         albumName: 'Album B',
         albumArtist: 'Album Artist B',
@@ -120,7 +120,7 @@ describe('assembleDiscographyTracks', () => {
         trackId: 'shared',
         providerSongId: 103,
         trackName: 'Shared from C',
-        singer: 'Singer C',
+        singer: 'Target Artist feat. Singer C',
         albumId: 'c',
         albumName: 'Album C',
         albumArtist: 'Album Artist C',
@@ -130,5 +130,23 @@ describe('assembleDiscographyTracks', () => {
         trackNumber: 3,
       },
     })
+  })
+
+  it('filters non-participating artists before stable ID deduplication', () => {
+    const albumA = makeAlbum('a', '蔡徐坤', [
+      makeTrack('shared', 'a', 101, 'Wrong first occurrence', 'Other Singer', 1),
+      makeTrack('substring', 'a', 102, 'Substring only', '蔡徐坤工作室', 2),
+      makeTrack('collaboration', 'a', 103, 'Collaboration', 'Guest、蔡徐坤', 3),
+    ])
+    const albumB = makeAlbum('b', '蔡徐坤', [
+      makeTrack('shared', 'b', 104, 'Target occurrence', 'KUN蔡徐坤', 1),
+    ])
+
+    const result = assembleDiscographyTracks([albumA, albumB], '蔡徐坤')
+
+    expect(result.rawTrackCount).toBe(2)
+    expect(result.tracks.map(track => track.name)).toEqual(['Collaboration', 'Target occurrence'])
+    expect(result.deduplications).toEqual([])
+    expect(result.tracks.map(track => track.meta.trackNumber)).toEqual([3, 1])
   })
 })

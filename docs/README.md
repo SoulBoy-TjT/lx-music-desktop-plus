@@ -118,6 +118,7 @@ PROG: active -> final
 - [BIZ-20260811-04 完整 FLAC 仅对末帧后有界尾随数据执行无损规范化](decisions/BIZ-20260811-04-flac-trailing-data-normalization.md)
 - [BIZ-20260811-05 歌曲整理所有任务均不可由用户或退出流程取消](decisions/BIZ-20260811-05-song-organizer-non-cancellable-operations.md)
 - [BIZ-20260811-06 超长歌手与歌曲字段分别省略并预留下载内部文件名空间](decisions/BIZ-20260811-06-download-long-name-semantic-truncation.md)
+- [BIZ-20260817-01 专辑抓取仅组装已确认歌手参与的歌曲](decisions/BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md)
 - [DEV-20260805-01 歌手专辑目录组装技术方案](designs/DEV-20260805-01-artist-discography-playlist.md)
 - [DEV-20260806-01 下载目标解析与任务固化技术方案](designs/DEV-20260806-01-album-structured-download.md)
 - [DEV-20260806-02 歌曲文件夹整理技术方案](designs/DEV-20260806-02-song-folder-organizer.md)
@@ -162,3 +163,4 @@ PROG: active -> final
 - [PROG-20260809](progress/PROG-20260809.md)
 - [PROG-20260810](progress/PROG-20260810.md)
 - [PROG-20260811](progress/PROG-20260811.md)
+- [PROG-20260817](progress/PROG-20260817.md)

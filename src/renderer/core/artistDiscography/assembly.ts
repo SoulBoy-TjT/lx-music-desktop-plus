@@ -3,6 +3,7 @@ import type {
   DiscographyTrackDeduplication,
   DiscographyTrackOccurrence,
 } from './types'
+import { isArtistParticipation } from './artistParticipation'
 
 const getTrackNumber = (track: LX.Music.MusicInfoOnline): number | null => {
   const trackNumber = track.meta.trackNumber
@@ -11,7 +12,10 @@ const getTrackNumber = (track: LX.Music.MusicInfoOnline): number | null => {
     : null
 }
 
-export const assembleDiscographyTracks = (albums: DiscographyAlbumPlan[]) => {
+export const assembleDiscographyTracks = (
+  albums: DiscographyAlbumPlan[],
+  confirmedArtist: string,
+) => {
   const tracks: LX.Music.MusicInfoOnline[] = []
   const deduplications: DiscographyTrackDeduplication[] = []
   const firstOccurrenceByTrackId = new Map<string, DiscographyTrackOccurrence>()
@@ -19,6 +23,7 @@ export const assembleDiscographyTracks = (albums: DiscographyAlbumPlan[]) => {
 
   for (const [albumIndex, albumPlan] of albums.entries()) {
     for (const [trackIndex, track] of albumPlan.tracks.entries()) {
+      if (!isArtistParticipation(confirmedArtist, track.singer)) continue
       occurrencePosition++
       const occurrence: DiscographyTrackOccurrence = {
         source: albumPlan.album.source,

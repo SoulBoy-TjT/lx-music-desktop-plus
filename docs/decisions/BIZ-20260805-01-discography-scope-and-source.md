@@ -4,7 +4,7 @@ type: BIZ
 title: 歌手专辑目录口径与来源策略
 status: accepted
 created_at: 2026-08-05
-updated_at: 2026-08-09
+updated_at: 2026-08-17
 owner: KhalilFong
 decision_date: 2026-08-05
 decision_owner: KhalilFong
@@ -14,6 +14,8 @@ supersedes: []
 ---
 
 # 歌手专辑目录口径与来源策略
+
+> 2026-08-17 起，[BIZ-20260817-01](BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md) 局部修订本决策第 4 节及对应确认项：逐专辑完整详情仍必须获取和校验，但最终来源组装只保留已确认歌手参与的歌曲。本决策未被修订的专辑范围、来源边界、分页、完整性和写入规则继续有效。
 
 ## 关联文档
 

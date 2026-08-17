@@ -132,7 +132,7 @@ export const prepareArtistDiscographyApply = (
     }
   }
 
-  const assembled = assembleDiscographyTracks(selected.albums)
+  const assembled = assembleDiscographyTracks(selected.albums, input.plan.artist.name)
   if (!assembled.tracks.length) {
     return {
       tracks: [],

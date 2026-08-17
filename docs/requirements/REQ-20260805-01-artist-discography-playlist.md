@@ -4,18 +4,21 @@ type: REQ
 title: 歌手全专辑歌单生成与原生下载衔接
 status: in_progress
 created_at: 2026-08-05
-updated_at: 2026-08-09
+updated_at: 2026-08-17
 owner: KhalilFong
 supersedes: []
 ---
 
 # 歌手全专辑歌单生成与原生下载衔接
 
+> 2026-08-17 起，[BIZ-20260817-01](../decisions/BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md) 修订本需求的最终歌曲集合：完整专辑详情继续用于校验，但生成歌单只组装已确认歌手参与的曲目。此前按旧口径取得的历史验收证据不改写，当前行为以修订后的 `REQ-20260809-01` 和技术方案为准。
+
 ## 关联文档
 
 - 业务决策：[BIZ-20260805-01 歌手专辑目录口径与来源策略](../decisions/BIZ-20260805-01-discography-scope-and-source.md)
 - 业务决策：[BIZ-20260807-01 批量下载优先音质与逐曲自动降级策略](../decisions/BIZ-20260807-01-batch-download-quality-fallback.md)
 - 业务决策：[BIZ-20260809-02 工具页面采用歌手名称输入、可选来源目录与独立图标](../decisions/BIZ-20260809-02-tool-input-directory-and-icons.md)
+- 业务决策修订：[BIZ-20260817-01 专辑抓取仅组装已确认歌手参与的歌曲](../decisions/BIZ-20260817-01-filter-album-tracks-by-confirmed-artist.md)
 - 技术方案：[DEV-20260805-01 歌手专辑目录组装技术方案](../designs/DEV-20260805-01-artist-discography-playlist.md)
 - 后续独立需求：[REQ-20260806-01 下载文件曲序命名与专辑目录组织](REQ-20260806-01-album-structured-download.md)
 - 后续独立需求：[REQ-20260806-02 歌曲文件夹整理与音频可播放性检查](REQ-20260806-02-song-folder-organizer.md)

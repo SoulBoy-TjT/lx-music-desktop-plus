@@ -698,7 +698,7 @@ export const planArtistDiscography = async(
   )
   basePlan.albums = details.results
 
-  const assembled = assembleDiscographyTracks(basePlan.albums)
+  const assembled = assembleDiscographyTracks(basePlan.albums, artist.name)
   basePlan.tracks = assembled.tracks
   basePlan.deduplications = assembled.deduplications
   basePlan.rawTrackCount = assembled.rawTrackCount

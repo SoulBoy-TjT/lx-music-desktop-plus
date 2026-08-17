@@ -985,7 +985,7 @@
   "tools__discography_progress_complete": "Album detail collection finished: {completed} / {total}",
   "tools__discography_progress_tracks": "Collecting complete album tracks: {completed} / {total}",
   "tools__discography_progress_waiting": "Waiting to start…",
-  "tools__discography_raw_tracks": "Valid tracks across albums",
+  "tools__discography_raw_tracks": "Tracks involving the target artist",
   "tools__discography_residual_list": "Compensation failed. Residual playlist ID: {id}. Check it in local playlists.",
   "tools__discography_select_all": "Select all",
   "tools__discography_select_none": "Clear selection",

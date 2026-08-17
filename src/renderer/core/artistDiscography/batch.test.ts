@@ -23,6 +23,7 @@ const makeTrack = (
   source: ArtistDiscographySource,
   albumId: string,
   songId = `${source}-track`,
+  singer = 'Artist',
 ): LX.Music.MusicInfoOnline => {
   const meta: Record<string, unknown> = {
     songId,
@@ -36,7 +37,7 @@ const makeTrack = (
   return {
     id: `${source}_${songId}`,
     name: `${source} track`,
-    singer: 'Artist',
+    singer,
     source,
     interval: '03:00',
     meta,
@@ -164,6 +165,44 @@ describe('artist discography batch module', () => {
     expect(Object.keys(batch.plans)).toEqual(['tx', 'wy'])
     expect(batch.status).toBe('ready')
     expect(batch.canApply).toBe(true)
+  })
+
+  it('does not make a source generatable when its complete album only has other artists', async() => {
+    const fixtureCatalogs = catalogs()
+    fixtureCatalogs.tx = {
+      ...fixtureCatalogs.tx,
+      getAlbumTracks: async albumId => collection([
+        makeTrack('tx', albumId, 'tx-other', 'Other Artist'),
+      ]),
+    }
+    let mutations = 0
+    const module = createArtistDiscographyBatchModule({
+      catalogs: fixtureCatalogs,
+      playlist: {
+        create: async() => { mutations++ },
+        add: async() => { mutations++ },
+        remove: async() => { mutations++ },
+      },
+    })
+
+    const batch = await module.plan({ artistName: 'Artist', sources: ['tx'] })
+
+    expect(batch.status).toBe('blocked')
+    expect(batch.canApply).toBe(false)
+    expect(batch.plans.tx).toMatchObject({
+      status: 'failed',
+      canApply: false,
+      rawTrackCount: 0,
+      deduplicatedTrackCount: 0,
+      albums: [expect.objectContaining({ status: 'complete', actualCount: 1 })],
+      issues: [expect.objectContaining({ code: 'empty_catalog' })],
+    })
+
+    const result = await module.apply({ plan: batch, sources: ['tx'] })
+
+    expect(result.status).toBe('validation_failed')
+    expect(result.failedSource).toBeNull()
+    expect(mutations).toBe(0)
   })
 
   it('rejects an empty fetch selection before requesting any provider', async() => {
@@ -538,6 +577,7 @@ describe('artist discography batch module', () => {
       getAlbumTracks: async albumId => collection([
         makeTrack('tx', albumId, 'tx-track-a'),
         makeTrack('tx', albumId, 'tx-track-b'),
+        makeTrack('tx', albumId, 'tx-other', 'Other Artist'),
       ]),
     }
     const created: Array<{ id: string, name: string }> = []
