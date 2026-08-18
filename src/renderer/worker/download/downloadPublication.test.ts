@@ -33,6 +33,7 @@ const validateFixtureAudio = async(filePath: string): Promise<LX.Download.Downlo
   const validator = new DownloadAudioValidatorService({ resolveFfmpegPath: async() => ffmpegPath })
   return validator.validate({ taskId: `fixture-validation-${++validationSequence}`, filePath })
 }
+const acceptFixtureAudio = async(): Promise<LX.Download.DownloadAudioValidationResult> => ({ status: 'valid' })
 const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000000020001e221bc330000000049454e44ae426082', 'hex')
 
 const createTempDir = async() => {
@@ -687,6 +688,140 @@ describe('download actual-format staging publication', () => {
     expect(lifecycle.release).toHaveBeenCalledOnce()
     expect(actionRelease).toHaveBeenCalledOnce()
     expect(validateAudio.release).toHaveBeenCalledOnce()
+  })
+
+  it('automatically resumes a partially transferred response after the connection is interrupted', async() => {
+    const dir = await createTempDir()
+    const audio = getAudioFixture('mp3Cbr256')
+    const splitAt = Math.floor(audio.length / 2)
+    const plannedPath = path.join(dir, 'interrupted-transfer.mp3')
+    const ranges: Array<string | undefined> = []
+    const port = await listen(createServer((request, response) => {
+      const range = request.headers.range
+      ranges.push(range)
+      if (ranges.length === 1) {
+        response.writeHead(200, {
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(audio.length),
+        })
+        response.write(audio.subarray(0, splitAt), () => {
+          setTimeout(() => { response.destroy() }, 5)
+        })
+        return
+      }
+
+      const match = typeof range === 'string' ? /^bytes=(\d+)-$/.exec(range) : null
+      if (!match) {
+        response.writeHead(400)
+        response.end()
+        return
+      }
+      const start = Number(match[1])
+      response.writeHead(206, {
+        'Accept-Ranges': 'bytes',
+        'Content-Length': String(audio.length - start),
+        'Content-Range': `bytes ${start}-${audio.length - 1}/${audio.length}`,
+      })
+      response.end(audio.subarray(start))
+    }))
+    const task = {
+      id: `interrupted-transfer-${Date.now()}`,
+      isComplate: false,
+      status: 'waiting',
+      statusText: '',
+      downloaded: 0,
+      total: 0,
+      progress: 0,
+      speed: '',
+      writeQueue: 0,
+      metadata: {
+        musicInfo: createMusicInfo(),
+        url: `http://127.0.0.1:${port}/audio`,
+        requestedQuality: '192k',
+        quality: '192k',
+        ext: 'mp3',
+        fileName: 'interrupted-transfer.mp3',
+        filePath: plannedPath,
+      },
+    } satisfies LX.Download.ListItem
+
+    try {
+      const publication = await new Promise<LX.Download.DownloadPublication>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('interrupted transfer retry timeout'))
+        }, 3_000)
+        void startTask(task, dir, true, event => {
+          if (event.action === 'complete') {
+            clearTimeout(timeout)
+            resolve(event.data)
+            return true
+          } else if (event.action === 'error') {
+            clearTimeout(timeout)
+            reject(new Error(event.data.message ?? event.data.error ?? 'download failed'))
+          }
+        }, undefined, acceptFixtureAudio)
+      })
+
+      expect(ranges).toHaveLength(2)
+      expect(ranges[0]).toBe('bytes=0-')
+      expect(ranges[1]).toBe(`bytes=${splitAt - 10}-`)
+      expect(await readFile(publication.stagingPath)).toEqual(audio)
+      await discardDownloadedAudio(publication)
+    } finally {
+      await removeTask(task.id)
+    }
+  })
+
+  it('reports a terminal error after the socket closes for all three attempts', async() => {
+    const dir = await createTempDir()
+    const plannedPath = path.join(dir, 'socket-hang-up.mp3')
+    const ranges: Array<string | undefined> = []
+    const port = await listen(createServer((request) => {
+      ranges.push(request.headers.range)
+      request.socket.destroy()
+    }))
+    const task = {
+      id: `socket-hang-up-${Date.now()}`,
+      isComplate: false,
+      status: 'waiting',
+      statusText: '',
+      downloaded: 0,
+      total: 0,
+      progress: 0,
+      speed: '',
+      writeQueue: 0,
+      metadata: {
+        musicInfo: createMusicInfo(),
+        url: `http://127.0.0.1:${port}/audio`,
+        requestedQuality: '192k',
+        quality: '192k',
+        ext: 'mp3',
+        fileName: 'socket-hang-up.mp3',
+        filePath: plannedPath,
+      },
+    } satisfies LX.Download.ListItem
+
+    try {
+      const error = await new Promise<Extract<LX.Download.DownloadTaskActions, { action: 'error' }>['data']>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('socket hang up terminal error timeout'))
+        }, 5_000)
+        void startTask(task, dir, true, event => {
+          if (event.action === 'complete') {
+            clearTimeout(timeout)
+            reject(new Error('unexpected download completion'))
+          } else if (event.action === 'error') {
+            clearTimeout(timeout)
+            resolve(event.data)
+          }
+        })
+      })
+
+      expect(ranges).toEqual(['bytes=0-', 'bytes=0-', 'bytes=0-'])
+      expect(error.message).toBe('socket hang up')
+    } finally {
+      await removeTask(task.id)
+    }
   })
 
   it('emits a compatible complete event that references staging, not a premature final artifact', async() => {

@@ -156,6 +156,7 @@ PROG: active -> final
 - [BUG-20260811-06 完整 FLAC 因末帧后尾随数据被严格校验拒绝](bugs/BUG-20260811-06-valid-flac-rejected-for-trailing-data.md)
 - [BUG-20260811-07 下载内部文件名超出 Windows 单段上限导致长名称歌曲发布失败](bugs/BUG-20260811-07-download-internal-artifact-name-too-long.md)
 - [BUG-20260811-08 完整 FLAC 因相邻末帧 CRC 候选被歧义保护误拒](bugs/BUG-20260811-08-flac-terminal-frame-boundary-ambiguity.md)
+- [BUG-20260818-01 下载响应中途断开后任务停留在运行状态](bugs/BUG-20260818-01-interrupted-download-stuck-running.md)
 - [PROG-20260805](progress/PROG-20260805.md)
 - [PROG-20260806](progress/PROG-20260806.md)
 - [PROG-20260807](progress/PROG-20260807.md)
@@ -164,3 +165,4 @@ PROG: active -> final
 - [PROG-20260810](progress/PROG-20260810.md)
 - [PROG-20260811](progress/PROG-20260811.md)
 - [PROG-20260817](progress/PROG-20260817.md)
+- [PROG-20260818](progress/PROG-20260818.md)

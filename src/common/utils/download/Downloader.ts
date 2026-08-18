@@ -44,6 +44,8 @@ class Task extends EventEmitter {
   private dataWriteQueueLength = 0
   private closeWaiting = false
   private timeout: null | NodeJS.Timeout = null
+  private attemptId = 0
+  private writeStreamClosePromise: Promise<void> | null = null
 
 
   constructor(url: string, savePath: string, filename: string, options: Partial<Options> = {}) {
@@ -64,7 +66,7 @@ class Task extends EventEmitter {
     this.status = STATUS.idle
   }
 
-  async __init() {
+  async __init(attemptId: number) {
     const { path, startByte, endByte } = this.chunkInfo
     this.redirectNum = 0
     this.progress.downloaded = 0
@@ -74,35 +76,52 @@ class Task extends EventEmitter {
     this.closeWaiting = false
     this.resumeLastChunk = null
     this.__clearTimeout()
-    this.__startTimeout()
+    this.__startTimeout(attemptId)
     if (startByte) this.requestOptions.headers!.range = `bytes=${startByte}-${endByte}`
 
     if (!path) return
     return new Promise<void>((resolve, reject) => {
       fs.stat(path, (errStat, stats) => {
+        if (attemptId !== this.attemptId) {
+          resolve()
+          return
+        }
         if (errStat) {
           // console.log(errStat.code)
           if (errStat.code !== 'ENOENT') {
-            this.__handleError(errStat)
+            this.__handleError(errStat, attemptId)
             reject(errStat)
             return
           }
         } else if (stats.size >= 10) {
           fs.open(path, 'r', (errOpen, fd) => {
+            if (attemptId !== this.attemptId) {
+              if (errOpen) resolve()
+              else fs.close(fd, () => { resolve() })
+              return
+            }
             if (errOpen) {
-              this.__handleError(errOpen)
+              this.__handleError(errOpen, attemptId)
               reject(errOpen)
               return
             }
             fs.read(fd, Buffer.alloc(10), 0, 10, stats.size - 10, (errRead, bytesRead, buffer) => {
+              if (attemptId !== this.attemptId) {
+                fs.close(fd, () => { resolve() })
+                return
+              }
               if (errRead) {
-                this.__handleError(errRead)
+                this.__handleError(errRead, attemptId)
                 reject(errRead)
                 return
               }
               fs.close(fd, errClose => {
+                if (attemptId !== this.attemptId) {
+                  resolve()
+                  return
+                }
                 if (errClose) {
-                  this.__handleError(errClose)
+                  this.__handleError(errClose, attemptId)
                   reject(errClose)
                   return
                 }
@@ -123,19 +142,20 @@ class Task extends EventEmitter {
     })
   }
 
-  __httpFetch(url: string, options: Options['requestOptions']) {
+  __httpFetch(url: string, options: Options['requestOptions'], attemptId: number) {
     // console.log(options)
     let redirected = false
     this.requestInstance = request(url, options)
       .on('response', response => {
+        if (attemptId !== this.attemptId || this.status !== STATUS.running) return
         if (response.statusCode !== 200 && response.statusCode !== 206) {
           if (response.statusCode == 416) {
             fs.unlink(this.chunkInfo.path, (err) => {
-              this.__handleError(new Error(response.statusMessage))
+              this.__handleError(new Error(response.statusMessage), attemptId)
               this.chunkInfo.startByte = '0'
               this.resumeLastChunk = null
               this.progress.downloaded = 0
-              if (err) this.__handleError(err)
+              if (err) this.__handleError(err, attemptId)
             })
             return
           }
@@ -145,49 +165,52 @@ class Task extends EventEmitter {
             redirected = true
             this.redirectNum++
             const location = response.headers.location
-            this.__httpFetch(location, options)
+            this.__httpFetch(location, options, attemptId)
             return
           }
           this.status = STATUS.failed
           this.emit('fail', response)
           this.__clearTimeout()
           this.__closeRequest()
-          void this.__closeWriteStream()
+          void this.__closeWriteStream().catch(() => {})
           return
         }
         this.emit('response', response)
         try {
-          this.__initDownload(response)
+          this.__initDownload(response, attemptId)
         } catch (error: any) {
-          this.__handleError(error)
+          this.__handleError(error, attemptId)
           return
         }
-        this.status = STATUS.running
-        this.__startTimeout()
+        if (attemptId !== this.attemptId || this.status !== STATUS.running) return
+        this.__startTimeout(attemptId)
         response
-          .on('data', this.__handleWriteData.bind(this))
-          .on('error', err => { this.__handleError(err) })
+          .on('data', chunk => { this.__handleWriteData(chunk, attemptId) })
+          .on('error', err => { this.__handleError(err, attemptId) })
           .on('end', () => {
+            if (attemptId !== this.attemptId || this.status !== STATUS.running) return
             if (response.complete) {
-              this.__handleComplete()
+              this.__handleComplete(attemptId)
             } else {
-              // this.__handleError(new Error('The connection was terminated while the message was still being sent'))
-              void this.stop()
+              this.__handleError(new Error('The connection was terminated while the message was still being sent'), attemptId)
             }
           })
       })
-      .on('error', err => { this.__handleError(err) })
-      .on('close', () => {
+      .on('error', err => {
         if (redirected) return
-        void this.__closeWriteStream()
+        this.__handleError(err, attemptId)
+      })
+      .on('close', () => {
+        if (redirected || attemptId !== this.attemptId) return
+        void this.__closeWriteStream().catch(error => { this.__handleError(error, attemptId) })
       })
       .end()
   }
 
-  __initDownload(response: http.IncomingMessage) {
+  __initDownload(response: http.IncomingMessage, attemptId: number) {
     this.progress.total = response.headers['content-length'] ? parseInt(response.headers['content-length']) : 0
     if (!this.progress.total) {
-      this.__handleError(new Error('Content length is 0'))
+      this.__handleError(new Error('Content length is 0'), attemptId)
       return
     }
     let options: any = {}
@@ -201,42 +224,49 @@ class Task extends EventEmitter {
       if (this.progress.downloaded) this.progress.total -= 10
     } else {
       if (this.chunkInfo.startByte != '0') {
-        this.__handleError(new Error('The resource cannot be resumed download.'))
+        this.__handleError(new Error('The resource cannot be resumed download.'), attemptId)
         return
       }
     }
     this.progress.total += this.progress.downloaded
     this.statsEstimate.prevBytes = this.progress.downloaded
     if (!this.chunkInfo.path) {
-      this.__handleError(new Error('Chunk save Path is not set.'))
+      this.__handleError(new Error('Chunk save Path is not set.'), attemptId)
       return
     }
-    this.ws = fs.createWriteStream(this.chunkInfo.path, options)
+    const ws = fs.createWriteStream(this.chunkInfo.path, options)
+    this.ws = ws
+    this.writeStreamClosePromise = null
 
-    this.ws.on('finish', () => {
-      if (this.closeWaiting) return
-      void this.__closeWriteStream()
+    ws.once('close', () => {
+      if (this.ws === ws) this.ws = null
     })
-    this.ws.on('error', err => {
+    ws.on('finish', () => {
+      if (attemptId !== this.attemptId) return
+      if (this.closeWaiting) return
+      void this.__closeWriteStream().catch(error => { this.__handleError(error, attemptId) })
+    })
+    ws.on('error', err => {
+      if (attemptId !== this.attemptId) return
       fs.unlink(this.chunkInfo.path, (unlinkErr: any) => {
-        this.__handleError(err)
+        this.__handleError(err, attemptId)
         this.chunkInfo.startByte = '0'
         this.resumeLastChunk = null
         this.progress.downloaded = 0
-        if (unlinkErr && unlinkErr.code !== 'ENOENT') this.__handleError(unlinkErr)
+        if (unlinkErr && unlinkErr.code !== 'ENOENT') this.__handleError(unlinkErr, attemptId)
       })
     })
   }
 
-  __handleComplete() {
-    if (this.status == STATUS.error) return
+  __handleComplete(attemptId: number) {
+    if (attemptId !== this.attemptId || this.status !== STATUS.running) return
     this.__clearTimeout()
     if (this.progress.progress <= 0) {
-      this.status = STATUS.error
-      this.emit('error', new Error('Progress is 0, download failed.'))
+      this.__handleError(new Error('Progress is 0, download failed.'), attemptId)
       return
     }
     void this.__closeWriteStream().then(() => {
+      if (attemptId !== this.attemptId || this.status !== STATUS.running) return
       if (this.progress.downloaded == this.progress.total) {
         this.status = STATUS.completed
         this.emit('completed')
@@ -244,43 +274,54 @@ class Task extends EventEmitter {
         this.status = STATUS.stopped
         this.emit('stop')
       }
-    })
+    }).catch(error => { this.__handleError(error, attemptId) })
     // console.log('end')
   }
 
-  __handleError(error: Error) {
-    if (this.status == STATUS.error) return
+  __handleError(error: Error, attemptId = this.attemptId) {
+    if (
+      attemptId !== this.attemptId ||
+      (this.status !== STATUS.init && this.status !== STATUS.running)
+    ) return
     this.status = STATUS.error
     this.__clearTimeout()
     this.__closeRequest()
-    void this.__closeWriteStream()
-    if (error.message == 'aborted') return
-    this.emit('error', error)
+    void this.__closeWriteStream().then(() => {
+      if (attemptId !== this.attemptId || this.status !== STATUS.error) return
+      this.emit('error', error)
+    }).catch(closeError => {
+      if (attemptId !== this.attemptId || this.status !== STATUS.error) return
+      this.emit('error', closeError)
+    })
   }
 
-  async __closeWriteStream() {
-    return new Promise<void>((resolve, reject) => {
-      if (!this.ws) {
-        resolve()
-        return
+  async __closeWriteStream(): Promise<void> {
+    if (this.writeStreamClosePromise) return this.writeStreamClosePromise
+    const ws = this.ws
+    if (!ws) return Promise.resolve()
+    this.writeStreamClosePromise = new Promise<void>((resolve, reject) => {
+      let settled = false
+      const settle = (error?: Error | null) => {
+        if (settled) return
+        settled = true
+        ws.off('close', handleClose)
+        ws.off('error', handleError)
+        if (this.ws === ws) this.ws = null
+        if (error) reject(error)
+        else resolve()
       }
+      const handleClose = () => { settle() }
+      const handleError = (error: Error) => { settle(error) }
+      ws.once('close', handleClose)
+      ws.once('error', handleError)
       // console.log('close write stream')
       if (this.closeWaiting || this.dataWriteQueueLength) {
         this.closeWaiting ||= true
-        this.ws.on('close', resolve)
       } else {
-        this.ws.close(err => {
-          if (err) {
-            this.status = STATUS.error
-            this.emit('error', err)
-            reject(err)
-            return
-          }
-          this.ws = null
-          resolve()
-        })
+        ws.close(err => { settle(err) })
       }
     })
+    return this.writeStreamClosePromise
   }
 
   __closeRequest() {
@@ -290,32 +331,30 @@ class Task extends EventEmitter {
     this.requestInstance = null
   }
 
-  __handleWriteData(chunk: Buffer) {
+  __handleWriteData(chunk: Buffer, attemptId: number) {
+    if (attemptId !== this.attemptId || this.status !== STATUS.running) return
     if (this.resumeLastChunk) {
       const result = this.__handleDiffChunk(chunk)
       if (result) chunk = result
       else {
-        void this.__handleStop().then(() => {
-          if (this.status == STATUS.stopped) return
-          this.__handleError(new Error('Resume failed, response chunk does not match.'))
-        }).catch(error => { this.__handleError(error) })
+        this.__handleError(new Error('Resume failed, response chunk does not match.'), attemptId)
         return
       }
     }
     // console.log('data', chunk)
-    if (this.status == STATUS.stopped || this.ws == null) {
+    if (this.ws == null) {
       console.log('cancel write')
       return
     }
     this.dataWriteQueueLength++
-    this.__startTimeout()
+    this.__startTimeout(attemptId)
     this.__calculateProgress(chunk.length)
     this.ws.write(chunk, err => {
       this.dataWriteQueueLength--
       if (this.status == STATUS.running) this.__calculateProgress(0)
       if (err) {
         console.log(err)
-        this.__handleError(err)
+        this.__handleError(err, attemptId)
         return
       }
       if (this.closeWaiting && !this.dataWriteQueueLength) this.ws?.close()
@@ -353,10 +392,10 @@ class Task extends EventEmitter {
     this.timeout = null
   }
 
-  private __startTimeout() {
+  private __startTimeout(attemptId = this.attemptId) {
     this.__clearTimeout()
     this.timeout = setTimeout(() => {
-      this.__handleError(new Error('download timeout'))
+      this.__handleError(new Error('download timeout'), attemptId)
     }, this.options.timeout)
   }
 
@@ -385,16 +424,18 @@ class Task extends EventEmitter {
   }
 
   async start() {
+    const attemptId = ++this.attemptId
     this.status = STATUS.init
-    await this.__init()
-    if (this.status !== STATUS.init) return
+    await this.__init(attemptId)
+    if (attemptId !== this.attemptId || this.status !== STATUS.init) return
     this.status = STATUS.running
-    this.__httpFetch(this.downloadUrl, this.requestOptions)
+    this.__httpFetch(this.downloadUrl, this.requestOptions, attemptId)
     this.emit('start')
   }
 
   async stop() {
     if (this.status == STATUS.stopped || this.status == STATUS.completed) return
+    this.attemptId++
     this.status = STATUS.stopped
     await this.__handleStop()
     this.emit('stop')

@@ -4,7 +4,7 @@ type: REQ
 title: 下载音频真实格式校验与降级发布
 status: in_progress
 created_at: 2026-08-11
-updated_at: 2026-08-11
+updated_at: 2026-08-18
 owner: KhalilFong
 ---
 
@@ -22,6 +22,7 @@ owner: KhalilFong
 - 关联缺陷：[BUG-20260811-06 完整 FLAC 因末帧后尾随数据被严格校验拒绝](../bugs/BUG-20260811-06-valid-flac-rejected-for-trailing-data.md)
 - 关联缺陷：[BUG-20260811-07 下载内部文件名超出 Windows 单段上限导致长名称歌曲发布失败](../bugs/BUG-20260811-07-download-internal-artifact-name-too-long.md)
 - 关联缺陷：[BUG-20260811-08 完整 FLAC 因相邻末帧 CRC 候选被歧义保护误拒](../bugs/BUG-20260811-08-flac-terminal-frame-boundary-ambiguity.md)
+- 关联缺陷：[BUG-20260818-01 下载响应中途断开后任务停留在运行状态](../bugs/BUG-20260818-01-interrupted-download-stuck-running.md)
 
 ## 背景
 
@@ -66,6 +67,8 @@ Provider 或自定义源可能在请求 FLAC 时返回 MP3。当前链路按计�
 包含长名称修复的 Windows x64 NSIS 已完成生产构建和静态验包，但安装器尚未运行，也未在真实 Electron 中重新创建并下载两首长合唱曲；`BUG-20260811-07` 因而保持 `fixed` 而非 `verified`。《怜心（伴奏）》的最终帧候选问题已独立记录为 `BUG-20260811-08`，不属于长名称验收项，也没有通过长名称修复放宽严格校验。
 
 `BUG-20260811-08` 已完成代码、自动化和真实 Main public validator seam 验证。真实《怜心（伴奏）》原件为 `49,788,606` bytes，严格失败前已输出与声明样本数一致的 `49,528,832` bytes canonical s16le PCM；31 字节候选严格失败后，30 字节候选生成 `49,788,576` bytes 副本并严格解码成功，副本与原始失败解码输出的 canonical s16le PCM SHA-256 均为 `bd4865b157626989061b6f7e933b3a2a7301f2662785c87ca319dce91c105185`，来源文件前后内容与 SHA-256 不变。定向 4 个测试文件、92 项全部通过；全专题 55 个文件通过、1 个文件跳过，469 项通过、1 项跳过；Common、Main、Renderer TypeScript 与 3 个变更 TypeScript 文件定向 ESLint 均退出 0，AC-10 的自动化边界据此完成。新安装包已完成生产构建和静态验包，真实 Electron 重下仍待完成，BUG 状态为 `fixed` 而非 `verified`。
+
+`BUG-20260818-01` 已恢复 `aborted`、`socket hang up` 与不完整响应结束的错误上报；错误等待写流关闭后唯一上报，并以 attempt token 隔离旧网络、超时和磁盘初始化回调。Worker 沿用“初次失败后最多自动重试 2 次”语义从 transfer 文件执行 Range 续传。本地 HTTP 公开 Worker seam 已证明中途断流可自动续传并逐字节还原音频，连续 3 次响应头前断连会在两次重试后进入错误终态；扩展下载回归 5 个文件、59 项通过，Common/Renderer TypeScript、定向与全量 ESLint、Renderer 生产构建均退出 0。真实 Electron 安装态的受控断流与休眠/唤醒仍待人工验证，缺陷状态为 `fixed` 而非 `verified`。
 
 真实《STRANGE》文件已通过 Main public service 隔离验证：来源文件保持不变，规范化副本精确删除末帧后的 30 字节，严格完整解码、格式与样本数复验通过；固定回归继续拒绝中段损坏、样本/CRC 异常及尾随超限，AC-08 据此勾选。用户此前已在真实 Electron 下载页确认任务能够离开 `0%` 并到达 `99.99%`，不再出现 `DataCloneError`，AC-07 保持完成。
 
