@@ -252,7 +252,6 @@ export const buildSongOrganizerArtistRows = (
     const checkDisabledReason = options.snapshotOperable ? undefined : 'snapshot_outdated'
     let organizeDisabledReason: SongOrganizerOrganizeDisabledReason | undefined
     if (!options.snapshotOperable) organizeDisabledReason = 'snapshot_outdated'
-    else if (!validation) organizeDisabledReason = 'check_required'
     else if (!cleanableAnomalies.length && renameBlockedReasons.length) organizeDisabledReason = 'blocked'
     else if (!cleanableAnomalies.length && !renamePlan?.steps.length) organizeDisabledReason = 'nothing_to_rename'
 

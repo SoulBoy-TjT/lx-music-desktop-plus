@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const readSource = async(relativePath: string): Promise<string> => fs.readFile(path.join(process.cwd(), relativePath), 'utf8')
 
 describe('song organizer IPC surface', () => {
-  it('exposes checked organize operations without a user or exit cancellation surface', async() => {
+  it('exposes direct organize operations without a user or exit cancellation surface', async() => {
     const [names, mainHandlers, rendererWrappers, organizerView, organizerComposable, exitCoordinator, appExit] = await Promise.all([
       readSource('src/common/ipcNames.ts'),
       readSource('src/main/modules/winMain/rendererEvent/songOrganizer.ts'),
@@ -21,6 +21,7 @@ describe('song organizer IPC surface', () => {
       'song_organizer_cleanup_apply',
       'song_organizer_rename_apply',
       'song_organizer_scan_cancel',
+      'song_organizer_check_start',
     ]) {
       expect(names).not.toContain(legacyName)
       expect(mainHandlers).not.toContain(legacyName)
@@ -31,12 +32,15 @@ describe('song organizer IPC surface', () => {
       'applySongOrganizerCleanup',
       'applySongOrganizerRename',
       'cancelSongOrganizerScan',
+      'startSongOrganizerCheck',
     ]) expect(rendererWrappers).not.toContain(legacyWrapper)
+    expect(organizerView).not.toContain('@click="check(row)"')
+    expect(organizerView).not.toContain('row.validationStatus')
     expect(organizerView).not.toContain('cancelScan')
     expect(organizerView).not.toContain('song_organizer__cancel')
     expect(organizerComposable).not.toContain('cancelSongOrganizerScan')
     expect(exitCoordinator).not.toContain('cancelReadOperationsAndWait')
     expect(appExit).not.toContain('cancelReadOperationsAndWait')
-    expect(appExit).toContain('歌曲整理正在扫描、检查或修改磁盘')
+    expect(appExit).toContain('歌曲整理正在扫描或修改磁盘')
   })
 })

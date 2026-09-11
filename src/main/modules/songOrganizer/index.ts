@@ -7,7 +7,6 @@ import type {
   SongOrganizerApplyParams,
   SongOrganizerAudioFingerprint,
   SongOrganizerCapability,
-  SongOrganizerCheckParams,
   SongOrganizerCleanupApplyParams,
   SongOrganizerCleanupItem,
   SongOrganizerCleanupPreview,
@@ -21,7 +20,6 @@ import type {
   SongOrganizerSnapshot,
   SongOrganizerValidationSnapshot,
 } from '@common/songOrganizer'
-import { FfmpegAudioValidator, isFfmpegAvailable, resolveFfmpegPath } from './audioValidator'
 import type { AudioValidator } from './audioValidator'
 import { AudioFfmpegTerminationError } from '../audioFfmpeg/processTermination'
 import { assertPathInArtist, assertSafeRoot, isPathInside, SongOrganizerPathError } from './pathSafety'
@@ -146,7 +144,6 @@ export class SongOrganizerService {
   private readonly validations = new Map<string, SongOrganizerValidationSnapshot>()
   private readonly activeReadOperations = new Set<Promise<AudioFfmpegTerminationError | undefined>>()
   private terminationFailure?: AudioFfmpegTerminationError
-  private readonly createValidator: (ffmpegPath: string) => AudioValidator
   private readonly writeOperationJournal: typeof writeJournal
   private readonly clearOperationJournal: typeof clearJournal
 
@@ -155,7 +152,6 @@ export class SongOrganizerService {
     writeJournal?: typeof writeJournal
     clearJournal?: typeof clearJournal
   } = {}) {
-    this.createValidator = options.createValidator ?? (ffmpegPath => new FfmpegAudioValidator(ffmpegPath))
     this.writeOperationJournal = options.writeJournal ?? writeJournal
     this.clearOperationJournal = options.clearJournal ?? clearJournal
   }
@@ -188,7 +184,7 @@ export class SongOrganizerService {
   private publishRuntimeState(state: Omit<SongOrganizerRuntimeState, 'revision'>): void {
     this.runtimeState = {
       ...state,
-      validations: [...this.validations.values()],
+      validations: [],
       revision: this.runtimeState.revision + 1,
     }
     this.stateListener?.(this.getRuntimeState())
@@ -278,16 +274,7 @@ export class SongOrganizerService {
     const supported = process.platform == 'win32' && process.arch == 'x64'
     if (!supported) return { supported, platform: process.platform, arch: process.arch, validatorAvailable: false, reason: 'unsupported_platform' }
     if (options.probeValidator === false) return { supported, platform: process.platform, arch: process.arch, validatorAvailable: false }
-    const validatorPath = resolveFfmpegPath()
-    const validatorAvailable = await isFfmpegAvailable(validatorPath)
-    return {
-      supported,
-      platform: process.platform,
-      arch: process.arch,
-      validatorAvailable,
-      validatorPath,
-      reason: validatorAvailable ? undefined : 'validator_unavailable',
-    }
+    return { supported, platform: process.platform, arch: process.arch, validatorAvailable: false }
   }
 
   private protectedPaths(): string[] {
@@ -452,99 +439,6 @@ export class SongOrganizerService {
     }
   }
 
-  async check(params: SongOrganizerCheckParams): Promise<SongOrganizerValidationSnapshot> {
-    if (this.operationRunning) throw new Error('磁盘操作进行中，暂时不能开始检查。')
-    const quickSnapshot = this.assertCurrentSnapshot(params.quickSnapshotId)
-    const artist = quickSnapshot.artists.find(item => normalizePathKey(item.path) == normalizePathKey(params.artistPath))
-    if (!artist) throw new Error('歌手不属于当前快速统计结果。')
-    const taskId = params.taskId ?? randomUUID()
-    const abortController = new AbortController()
-    this.abortController?.abort()
-    this.abortController = abortController
-    this.currentScanTaskId = taskId
-    this.validations.delete(normalizePathKey(artist.path))
-    this.publishRuntimeState({
-      status: 'scanning',
-      taskId,
-      root: quickSnapshot.root,
-      snapshot: quickSnapshot,
-      progress: { taskId, phase: 'validating', checkedCount: 0, totalAudioCount: artist.audioCount },
-    })
-    const isCurrentTask = () => this.currentScanTaskId == taskId && this.abortController == abortController
-    const finishReadOperation = this.beginReadOperation()
-    let terminationError: AudioFfmpegTerminationError | undefined
-    try {
-      const capability = await this.capability()
-      if (!capability.validatorAvailable || !capability.validatorPath) throw new SongOrganizerPathError('validator_unavailable', '内置 FFmpeg 不可用，无法检查音频。')
-      const result = await scanSongOrganizerRoot({
-        root: quickSnapshot.root,
-        validator: this.createValidator(capability.validatorPath),
-        signal: abortController.signal,
-        protectedPaths: this.protectedPaths(),
-        blockedArtistPaths: await this.blockedArtists(quickSnapshot.root),
-        artistPaths: [artist.path],
-        mode: 'validate',
-        taskId,
-        onProgress: progress => {
-          if (!isCurrentTask()) return
-          this.progressListener?.(progress)
-          this.publishRuntimeState({
-            status: 'scanning',
-            taskId,
-            root: quickSnapshot.root,
-            snapshot: quickSnapshot,
-            progress,
-          })
-        },
-      })
-      if (result.snapshot.status != 'complete') throw new Error('音频检查已取消。')
-      const validation: SongOrganizerValidationSnapshot = {
-        id: taskId,
-        taskId,
-        quickSnapshotId: quickSnapshot.taskId,
-        root: quickSnapshot.root,
-        artistPath: artist.path,
-        status: 'complete',
-        checkedAt: Date.now(),
-        checkedCount: result.snapshot.checkedCount,
-        totalAudioCount: result.snapshot.totalAudioCount,
-        audioFingerprints: result.audioFingerprints,
-        snapshot: result.snapshot,
-      }
-      if (isCurrentTask()) {
-        this.validations.set(normalizePathKey(artist.path), validation)
-        this.publishRuntimeState({
-          status: 'complete',
-          taskId: quickSnapshot.taskId,
-          root: quickSnapshot.root,
-          snapshot: quickSnapshot,
-        })
-      }
-      return validation
-    } catch (error) {
-      if (error instanceof AudioFfmpegTerminationError) {
-        terminationError = error
-        this.terminationFailure ??= error
-      }
-      if (isCurrentTask()) {
-        this.publishRuntimeState({
-          status: abortController.signal.aborted ? 'cancelled' : 'failed',
-          taskId,
-          root: quickSnapshot.root,
-          snapshot: quickSnapshot,
-          errorMessage: abortController.signal.aborted ? undefined : (error as Error).message,
-        })
-      }
-      throw error
-    } finally {
-      if (isCurrentTask()) {
-        this.currentScanTaskId = undefined
-        this.abortController = undefined
-      }
-      finishReadOperation(terminationError)
-    }
-  }
-
   cancel(taskId: string): boolean {
     if (this.currentScanTaskId == taskId) {
       this.abortController?.abort()
@@ -579,7 +473,7 @@ export class SongOrganizerService {
       validation.id != params.validationId ||
       validation.quickSnapshotId != snapshot.taskId ||
       normalizePathKey(validation.root) != normalizePathKey(snapshot.root)
-    ) throw new Error('请先检查该歌手，再使用最新检查结果整理。')
+    ) throw new Error('整理预览已失效，请重新加载后再整理。')
     return validation
   }
 
@@ -624,7 +518,7 @@ export class SongOrganizerService {
       )
     })
     if (!added.length && !removed.length && !changed.length) return
-    throw new Error(`歌曲文件已变化（新增 ${added.length}，移除 ${removed.length}，替换或修改 ${changed.length}），请重新检查该歌手后再整理。`)
+    throw new Error(`歌曲文件已变化（新增 ${added.length}，移除 ${removed.length}，替换或修改 ${changed.length}），请重新加载该歌手后再整理。`)
   }
 
   private invalidateValidation(artistPath: string, snapshot: SongOrganizerSnapshot): void {
@@ -684,15 +578,40 @@ export class SongOrganizerService {
   }
 
   async organizePreview(params: SongOrganizerApplyParams): Promise<SongOrganizerOrganizePreview> {
-    const validation = this.assertCurrentValidation(params)
-    const preview = await this.buildCleanupPreview(validation.snapshot, params)
-    const selected = new Set(params.artistPaths.map(normalizePathKey))
-    return {
-      ...preview,
-      validationId: validation.id,
-      renameSteps: validation.snapshot.renamePlan
-        .filter(plan => selected.has(normalizePathKey(plan.artistPath)))
-        .flatMap(plan => plan.steps),
+    if (this.isBusy() || this.isReadBusy()) throw new Error('已有歌曲整理任务正在进行。')
+    const current = this.assertCurrentSnapshot(params.taskId)
+    if (params.artistPaths.length != 1 || !current.artists.some(artist => normalizePathKey(artist.path) == normalizePathKey(params.artistPaths[0]))) {
+      throw new Error('整理一次只能处理当前扫描结果中的一个歌手。')
+    }
+    this.operationRunning = true
+    try {
+      const scanned = await this.scanArtistsQuick(current.root, params.artistPaths, current.taskId)
+      this.assertCurrentSnapshot(params.taskId)
+      const validation: SongOrganizerValidationSnapshot = {
+        id: randomUUID(),
+        taskId: current.taskId,
+        quickSnapshotId: current.taskId,
+        root: current.root,
+        artistPath: params.artistPaths[0],
+        status: 'complete',
+        checkedAt: Date.now(),
+        checkedCount: 0,
+        totalAudioCount: scanned.snapshot.totalAudioCount,
+        audioFingerprints: scanned.audioFingerprints,
+        snapshot: scanned.snapshot,
+      }
+      this.validations.set(normalizePathKey(params.artistPaths[0]), validation)
+      const preview = await this.buildCleanupPreview(validation.snapshot, params)
+      const selected = new Set(params.artistPaths.map(normalizePathKey))
+      return {
+        ...preview,
+        validationId: validation.id,
+        renameSteps: validation.snapshot.renamePlan
+          .filter(plan => selected.has(normalizePathKey(plan.artistPath)))
+          .flatMap(plan => plan.steps),
+      }
+    } finally {
+      this.operationRunning = false
     }
   }
 
@@ -1005,6 +924,7 @@ export class SongOrganizerService {
         this.invalidateValidation(params.artistPaths[0], sourceSnapshot)
         throw error
       }
+      this.validations.delete(normalizePathKey(params.artistPaths[0]))
       let cleanupCompleted = false
       try {
         await this.cleanup(

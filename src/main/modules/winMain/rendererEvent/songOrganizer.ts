@@ -3,7 +3,6 @@ import { WIN_MAIN_RENDERER_EVENT_NAME } from '@common/ipcNames'
 import type {
   SongOrganizerApplyParams,
   SongOrganizerCapability,
-  SongOrganizerCheckParams,
   SongOrganizerOperationProgress,
   SongOrganizerScanParams,
   SongOrganizerSnapshot,
@@ -11,7 +10,6 @@ import type {
   SongOrganizerOrganizeApplyParams,
   SongOrganizerOrganizePreview,
   SongOrganizerRuntimeState,
-  SongOrganizerValidationSnapshot,
 } from '@common/songOrganizer'
 import { songOrganizerService, type ApplyResult } from '@main/modules/songOrganizer'
 import type { SongOrganizerJournal } from '@main/modules/songOrganizer/operationJournal'
@@ -31,7 +29,6 @@ export default () => {
   })
   mainHandle<never, SongOrganizerCapability>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_capability_get, async() => songOrganizerService.capability())
   mainHandle<SongOrganizerScanParams, SongOrganizerSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_start, async({ params }) => songOrganizerService.scan(params))
-  mainHandle<SongOrganizerCheckParams, SongOrganizerValidationSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_check_start, async({ params }) => songOrganizerService.check(params))
   mainHandle<string | undefined, SongOrganizerSnapshot | undefined>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_snapshot_get, async({ params }) => songOrganizerService.getSnapshot(params))
   mainHandle<never, SongOrganizerRuntimeState>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_state_get, async() => songOrganizerService.getRuntimeState())
   mainOn<string | null>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_playing_path_set, ({ params }) => {

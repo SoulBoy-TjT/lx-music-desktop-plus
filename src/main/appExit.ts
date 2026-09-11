@@ -21,7 +21,7 @@ export const appExitCoordinator = new AppExitCoordinator({
     await dialog.showMessageBox({
       type: 'warning',
       title: '歌曲整理进行中',
-      message: '歌曲整理正在扫描、检查或修改磁盘，完成前不能退出应用。',
+      message: '歌曲整理正在扫描或修改磁盘，完成前不能退出应用。',
       buttons: ['知道了'],
     })
   },

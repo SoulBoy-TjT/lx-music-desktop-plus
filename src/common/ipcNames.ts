@@ -166,7 +166,6 @@ const modules = {
     song_organizer_scan_start: 'song_organizer_scan_start',
     song_organizer_scan_progress: 'song_organizer_scan_progress',
     song_organizer_operation_progress: 'song_organizer_operation_progress',
-    song_organizer_check_start: 'song_organizer_check_start',
     song_organizer_snapshot_get: 'song_organizer_snapshot_get',
     song_organizer_state_get: 'song_organizer_state_get',
     song_organizer_state_changed: 'song_organizer_state_changed',

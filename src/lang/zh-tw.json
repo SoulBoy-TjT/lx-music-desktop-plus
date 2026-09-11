@@ -742,7 +742,7 @@
   "tools": "專輯擷取",
   "album_collection": "專輯擷取",
   "song_organizer": "歌曲整理",
-  "song_organizer__description": "先快速統計歌手和專輯目錄；按需檢查 MP3/FLAC，並安全清理及統一數量後綴。",
+  "song_organizer__description": "快速統計歌手和專輯資料夾，安全清理並統一數量後綴；不檢查音訊內容。",
   "song_organizer__unsupported": "歌曲整理僅支援 Windows x64。",
   "song_organizer__validator_unavailable": "內建 FFmpeg 不可用；目錄統計仍可查看，但檢查和整理已停用。",
   "song_organizer__select_root": "選擇歌曲整理根目錄",

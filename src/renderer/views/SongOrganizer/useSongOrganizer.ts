@@ -28,7 +28,6 @@ import {
   openDirInExplorer,
   showSelectDialog,
   startSongOrganizerScan,
-  startSongOrganizerCheck,
 } from '@renderer/utils/ipc'
 import { createSongOrganizerApplyParams } from './applyParams'
 import {
@@ -42,7 +41,6 @@ import {
   type SongOrganizerActionDisabledReason,
   type SongOrganizerArtistRow,
   type SongOrganizerOrganizeDisabledReason,
-  normalizeSongOrganizerPathKey,
 } from './viewModel'
 import {
   clearSongOrganizerOperationIssues,
@@ -393,52 +391,13 @@ export const useSongOrganizer = () => {
     showDetailDialog(t('song_organizer__latest_detail'), buildSongOrganizerDetailLines(row, t))
   }
 
-  const check = async(row: SongOrganizerArtistRow) => {
-    if (!snapshot.value || !validatorAvailable.value || Boolean(row.checkDisabledReason) || scanning.value || operating.value) return
-    const quickSnapshot = snapshot.value
-    const checkTaskId = nextOperationId(quickSnapshot.taskId)
-    scanning.value = true
-    snapshotOperable.value = false
-    errorMessage.value = ''
-    statusMessage.value = t('song_organizer__status_checking', { artist: row.artist.name })
-    resetProgressTask()
-    activeProgressTaskId = checkTaskId
-    try {
-      const validation = await startSongOrganizerCheck({
-        taskId: checkTaskId,
-        quickSnapshotId: quickSnapshot.taskId,
-        artistPath: row.artist.path,
-      })
-      const artistKey = normalizeSongOrganizerPathKey(row.artist.path)
-      validations.value = [
-        ...validations.value.filter(item => normalizeSongOrganizerPathKey(item.artistPath) != artistKey),
-        validation,
-      ]
-      snapshotOperable.value = true
-      statusMessage.value = t('song_organizer__status_check_complete', {
-        artist: row.artist.name,
-        songs: validation.totalAudioCount,
-        anomalies: validation.snapshot.anomalies.length,
-      })
-    } catch (error) {
-      errorMessage.value = (error as Error).message
-      snapshotOperable.value = true
-      statusMessage.value = t('song_organizer__status_failed_with_reason', { reason: errorMessage.value })
-    } finally {
-      scanning.value = false
-      resetProgressTask()
-      syncChangedRoot()
-    }
-  }
-
   const organize = async(row: SongOrganizerArtistRow) => {
-    if (!snapshot.value || !row.validation || Boolean(row.organizeDisabledReason) || scanning.value || operating.value) return
+    if (!snapshot.value || Boolean(row.organizeDisabledReason) || scanning.value || operating.value) return
     const sourceSnapshot = snapshot.value
     const sourceTaskId = sourceSnapshot.taskId
     const operationId = nextOperationId(sourceTaskId)
     const params = {
       ...createSongOrganizerApplyParams(sourceTaskId, [row.artist.path], currentPlayingPath(), operationId),
-      validationId: row.validation.id,
     }
     operating.value = true
     snapshotOperable.value = false
@@ -481,6 +440,7 @@ export const useSongOrganizer = () => {
       }
       const response = await applySongOrganizerOrganize({
         ...params,
+        validationId: preview.validationId,
         confirmedItemPaths: preview.items.map(item => item.path),
         playingFilePath: currentPlayingPath(),
       })
@@ -656,7 +616,6 @@ export const useSongOrganizer = () => {
     actionDisabledText,
     artistRows,
     capabilityReady,
-    check,
     checkProgressLabel,
     checkProgressTarget,
     chooseSpecifiedRoot,

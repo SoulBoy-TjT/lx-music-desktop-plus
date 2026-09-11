@@ -742,7 +742,7 @@
   "tools": "Album collection",
   "album_collection": "Album collection",
   "song_organizer": "Song organizer",
-  "song_organizer__description": "Quickly count artist and album folders first, then check MP3/FLAC files on demand and safely clean or normalize count suffixes.",
+  "song_organizer__description": "Scan artist and album folders, safely clean up files, and update song-count suffixes without decoding audio.",
   "song_organizer__unsupported": "Song organizer is available on Windows x64 only.",
   "song_organizer__validator_unavailable": "The bundled FFmpeg validator is unavailable. Folder counts remain visible, but Check and Organize are disabled.",
   "song_organizer__select_root": "Choose song organizer root",

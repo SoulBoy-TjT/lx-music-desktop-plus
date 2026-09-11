@@ -7,7 +7,6 @@ import { APP_EVENT_NAMES, DATA_KEYS, DEFAULT_SETTING } from '@common/constants'
 import type {
   SongOrganizerApplyParams,
   SongOrganizerCapability,
-  SongOrganizerCheckParams,
   SongOrganizerOperationProgress,
   SongOrganizerOperationResult,
   SongOrganizerOrganizeApplyParams,
@@ -17,7 +16,6 @@ import type {
   SongOrganizerSnapshot,
   SongOrganizerRecovery,
   SongOrganizerRuntimeState,
-  SongOrganizerValidationSnapshot,
 } from '@common/songOrganizer'
 import type {
   FlacConversionApplyParams,
@@ -35,7 +33,6 @@ type RemoveListener = () => void
 
 export const getSongOrganizerCapability = async() => rendererInvoke<SongOrganizerCapability>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_capability_get)
 export const startSongOrganizerScan = async(params: SongOrganizerScanParams) => rendererInvoke<SongOrganizerScanParams, SongOrganizerSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_start, params)
-export const startSongOrganizerCheck = async(params: SongOrganizerCheckParams) => rendererInvoke<SongOrganizerCheckParams, SongOrganizerValidationSnapshot>(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_check_start, params)
 export const onSongOrganizerScanProgress = (listener: LX.IpcRendererEventListenerParams<SongOrganizerScanProgress>): RemoveListener => {
   rendererOn(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_progress, listener)
   return () => rendererOff(WIN_MAIN_RENDERER_EVENT_NAME.song_organizer_scan_progress, listener)

@@ -5,7 +5,6 @@ import { shell } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LIST_IDS } from '@common/constants'
 import type { SongOrganizerCapability, SongOrganizerOperationProgress, SongOrganizerSnapshot } from '@common/songOrganizer'
-import { AudioFfmpegTerminationError } from '../audioFfmpeg/processTermination'
 import { AppExitCoordinator } from '../appExitCoordinator'
 import { SongOrganizerService } from './index'
 import { createSongOrganizerFileIdentity, getSongOrganizerMtimeMs, lstatWithFileIdentity } from './fileIdentity'
@@ -47,7 +46,7 @@ const capability: SongOrganizerCapability = {
 const setDownloadList = (getDownloadList: () => Promise<never[]>) => {
   Object.defineProperty(global, 'lx', {
     configurable: true,
-    value: { worker: { dbService: { getDownloadList } } },
+    value: { worker: { dbService: { getDownloadList, getAllUserList: async() => [], getListMusics: async() => [] } } },
   })
   Object.defineProperty(global, 'lxDataPath', {
     configurable: true,
@@ -66,6 +65,11 @@ afterEach(async() => {
   if (originalLxDataPath) Object.defineProperty(global, 'lxDataPath', originalLxDataPath)
   else Reflect.deleteProperty(global, 'lxDataPath')
 })
+
+const prepareForOrganize = async(service: SongOrganizerService, params: { quickSnapshotId: string, artistPath: string, taskId?: string }) => {
+  const preview = await service.organizePreview({ taskId: params.quickSnapshotId, artistPaths: [params.artistPath] })
+  return { id: preview.validationId }
+}
 
 describe('song organizer scan concurrency', () => {
   it('keeps the newer invocation current when the older capability check finishes last', async() => {
@@ -171,140 +175,21 @@ describe('song organizer runtime state', () => {
     expect(result.totals.playableCount).toBe(0)
   })
 
-  it('checks only the selected artist and binds the validation to the latest quick snapshot', async() => {
-    const root = await createTempRoot()
-    const firstArtist = path.join(root, 'First')
-    const secondArtist = path.join(root, 'Second')
-    await fs.mkdir(firstArtist)
-    await fs.mkdir(secondArtist)
-    await fs.writeFile(path.join(firstArtist, 'first.mp3'), 'audio')
-    await fs.writeFile(path.join(secondArtist, 'second.mp3'), 'audio')
-    const validate = vi.fn(async(_filePath: string, _signal: AbortSignal) => ({ status: 'playable' as const }))
-    const service = new SongOrganizerService({ createValidator: () => ({ validate }) })
-    setDownloadList(async() => [])
-    vi.spyOn(service, 'capability').mockResolvedValue(capability)
-    const quick = await service.scan({ root, taskId: 'quick-task' })
-
-    const checked = await service.check({
-      taskId: 'check-task',
-      quickSnapshotId: quick.taskId,
-      artistPath: firstArtist,
-    })
-
-    expect(validate).toHaveBeenCalledTimes(1)
-    expect(validate.mock.calls[0]?.[0]).toBe(path.join(firstArtist, 'first.mp3'))
-    expect(checked).toMatchObject({
-      quickSnapshotId: 'quick-task',
-      artistPath: firstArtist,
-      status: 'complete',
-      checkedCount: 1,
-    })
-    expect(checked.snapshot.validationStatus).toBe('checked')
-    expect(checked.audioFingerprints).toEqual([
-      expect.objectContaining({ path: path.join(firstArtist, 'first.mp3') }),
-    ])
-    expect(checked.snapshot.artists.map(artist => artist.path)).toEqual([firstArtist])
-    expect(service.getRuntimeState().validations).toEqual([expect.objectContaining({ artistPath: firstArtist })])
-  })
-
-  it('waits for an active artist check to settle before completing read cancellation', async() => {
+  it('prepares a selected artist directly without decoding audio', async() => {
     const root = await createTempRoot()
     const artistPath = path.join(root, 'Artist')
     await fs.mkdir(artistPath)
-    await fs.writeFile(path.join(artistPath, 'song.mp3'), 'audio')
-    const validationResult = deferred<{ status: 'check_failed', errorCode: string, errorMessage: string }>()
-    let validationSignal: AbortSignal | undefined
-    const validate = vi.fn(async(_filePath: string, signal: AbortSignal) => {
-      validationSignal = signal
-      return validationResult.promise
-    })
+    await fs.writeFile(path.join(artistPath, 'song.mp3'), 'invalid audio is preserved')
+    const validate = vi.fn()
     const service = new SongOrganizerService({ createValidator: () => ({ validate }) })
     setDownloadList(async() => [])
-    vi.spyOn(service, 'capability').mockResolvedValue(capability)
-    const quick = await service.scan({ root, taskId: 'quick-before-cancel' })
-    const check = service.check({ quickSnapshotId: quick.taskId, artistPath, taskId: 'cancel-check' })
-    await vi.waitFor(() => { expect(validate).toHaveBeenCalledTimes(1) })
-
-    expect(service.isReadBusy()).toBe(true)
-    const cancellation = service.cancelReadOperationsAndWait()
-    let cancellationSettled = false
-    void cancellation.then(() => {
-      cancellationSettled = true
-    })
-    await Promise.resolve()
-    expect(validationSignal?.aborted).toBe(true)
-    expect(cancellationSettled).toBe(false)
-    expect(service.isReadBusy()).toBe(true)
-
-    validationResult.resolve({
-      status: 'check_failed',
-      errorCode: 'scan_cancelled',
-      errorMessage: 'cancelled',
-    })
-    await expect(check).rejects.toThrow()
-    await cancellation
-
-    expect(cancellationSettled).toBe(true)
-    expect(service.isReadBusy()).toBe(false)
-    await expect(service.cancelReadOperationsAndWait()).resolves.toBeUndefined()
-    expect(service.getRuntimeState()).toMatchObject({
-      status: 'cancelled',
-      snapshot: { taskId: quick.taskId },
-      validations: [],
-    })
-  })
-
-  it('rejects read cancellation when an audio validator cannot confirm FFmpeg termination', async() => {
-    const root = await createTempRoot()
-    const artistPath = path.join(root, 'Artist')
-    await fs.mkdir(artistPath)
-    await fs.writeFile(path.join(artistPath, 'song.mp3'), 'audio')
-    const terminationError = new AudioFfmpegTerminationError('FFmpeg still running')
-    const validate = vi.fn(async(_filePath: string, signal: AbortSignal) => await new Promise<never>((_resolve, reject) => {
-      const rejectTermination = () => { reject(terminationError) }
-      if (signal.aborted) rejectTermination()
-      else signal.addEventListener('abort', rejectTermination, { once: true })
-    }))
-    const service = new SongOrganizerService({ createValidator: () => ({ validate }) })
-    setDownloadList(async() => [])
-    vi.spyOn(service, 'capability').mockResolvedValue(capability)
-    const quick = await service.scan({ root, taskId: 'quick-before-termination-failure' })
-    const check = service.check({
-      quickSnapshotId: quick.taskId,
-      artistPath,
-      taskId: 'termination-failure-check',
-    })
-    const checkOutcome = check.catch(error => error)
-    await vi.waitFor(() => { expect(validate).toHaveBeenCalledTimes(1) })
-
-    const cancellation = service.cancelReadOperationsAndWait()
-
-    await expect(checkOutcome).resolves.toBe(terminationError)
-    await expect(cancellation).rejects.toBe(terminationError)
-    expect(service.isReadBusy()).toBe(false)
-  })
-
-  it('retains an unconfirmed validator termination failure after the check is no longer active', async() => {
-    const root = await createTempRoot()
-    const artistPath = path.join(root, 'Artist')
-    await fs.mkdir(artistPath)
-    await fs.writeFile(path.join(artistPath, 'song.mp3'), 'audio')
-    const terminationError = new AudioFfmpegTerminationError('FFmpeg still running')
-    const service = new SongOrganizerService({
-      createValidator: () => ({ validate: async() => { throw terminationError } }),
-    })
-    setDownloadList(async() => [])
-    vi.spyOn(service, 'capability').mockResolvedValue(capability)
-    const quick = await service.scan({ root, taskId: 'quick-before-persisted-failure' })
-
-    await expect(service.check({
-      quickSnapshotId: quick.taskId,
-      artistPath,
-      taskId: 'persisted-termination-failure-check',
-    })).rejects.toBe(terminationError)
-
-    expect(service.isReadBusy()).toBe(false)
-    expect(service.getTerminationFailure()).toBe(terminationError)
+    vi.spyOn(service, 'capability').mockResolvedValue({ ...capability, validatorAvailable: false })
+    const quick = await service.scan({ root })
+    const preview = await service.organizePreview({ taskId: quick.taskId, artistPaths: [artistPath] })
+    expect(preview.validationId).toBeTruthy()
+    expect(preview.items).toEqual([])
+    expect(preview.renameSteps).toHaveLength(1)
+    expect(validate).not.toHaveBeenCalled()
   })
 
   it('invalidates and debounces a Main rescan when download occupancy shrinks', async() => {
@@ -435,28 +320,23 @@ describe('song organizer runtime state', () => {
 })
 
 describe('song organizer cleanup preview', () => {
-  it('requires the latest checked snapshot before organizing', async() => {
+  it('allows quick-scan previews but rejects stale preview tokens', async() => {
     const root = await createTempRoot()
     const artistPath = path.join(root, 'Artist')
     await fs.mkdir(artistPath)
     await fs.writeFile(path.join(artistPath, 'song.mp3'), 'audio')
-    const service = new SongOrganizerService({ createValidator: () => ({ validate: async() => ({ status: 'playable' }) }) })
+    const service = new SongOrganizerService()
     setDownloadList(async() => [])
     vi.spyOn(service, 'capability').mockResolvedValue(capability)
     const quick = await service.scan({ root, taskId: 'quick-only' })
-
-    await expect(service.organizePreview({
-      taskId: quick.taskId,
-      artistPaths: [artistPath],
-    })).rejects.toThrow('先检查')
-
-    const validation = await service.check({ quickSnapshotId: quick.taskId, artistPath, taskId: 'checked' })
+    const preview = await service.organizePreview({ taskId: quick.taskId, artistPaths: [artistPath] })
     await service.scan({ root, taskId: 'newer-quick' })
-    await expect(service.organizePreview({
+    await expect(service.organize({
       taskId: 'newer-quick',
-      validationId: validation.id,
+      validationId: preview.validationId,
       artistPaths: [artistPath],
-    })).rejects.toThrow('先检查')
+      confirmedItemPaths: [],
+    })).rejects.toThrow('预览已失效')
   })
 
   it('rejects a concurrent organize immediately while the first organize is still in preflight', async() => {
@@ -490,7 +370,7 @@ describe('song organizer cleanup preview', () => {
     Object.defineProperty(global, 'lxDataPath', { configurable: true, value: dataPath })
     vi.spyOn(service, 'capability').mockResolvedValue(capability)
     const quick = await service.scan({ root, taskId: 'quick-before-concurrent-organize' })
-    const validation = await service.check({
+    const validation = await prepareForOrganize(service, {
       quickSnapshotId: quick.taskId,
       artistPath,
       taskId: 'validation-before-concurrent-organize',
@@ -563,7 +443,7 @@ describe('song organizer cleanup preview', () => {
     Object.defineProperty(global, 'lxDataPath', { configurable: true, value: dataPath })
     vi.spyOn(service, 'capability').mockResolvedValue(capability)
     const quick = await service.scan({ root, taskId: 'quick-before-preflight-exit' })
-    const validation = await service.check({
+    const validation = await prepareForOrganize(service, {
       quickSnapshotId: quick.taskId,
       artistPath,
       taskId: 'validation-before-preflight-exit',
@@ -657,7 +537,7 @@ describe('song organizer cleanup preview', () => {
       Object.defineProperty(global, 'lxDataPath', { configurable: true, value: dataPath })
       vi.spyOn(service, 'capability').mockResolvedValue(capability)
       const quick = await service.scan({ root, taskId: `quick-${mutation.name}` })
-      const validation = await service.check({
+      const validation = await prepareForOrganize(service, {
         quickSnapshotId: quick.taskId,
         artistPath,
         taskId: `validation-${mutation.name}`,
@@ -670,8 +550,8 @@ describe('song organizer cleanup preview', () => {
         operationId: `organize-${mutation.name}`,
         artistPaths: [artistPath],
         confirmedItemPaths: [],
-      })).rejects.toThrow('重新检查')
-      expect(validate).toHaveBeenCalledTimes(1)
+      })).rejects.toThrow('重新加载')
+      expect(validate).not.toHaveBeenCalled()
       expect(service.getRuntimeState()).toMatchObject({
         status: 'complete',
         taskId: quick.taskId,
@@ -717,7 +597,7 @@ describe('song organizer cleanup preview', () => {
     const trashItem = Reflect.get(shell, 'trashItem') as ReturnType<typeof vi.fn>
     trashItem.mockImplementation(async(target: string) => fs.rm(target, { recursive: true, force: true }))
     const quick = await service.scan({ root, taskId: 'quick' })
-    const validation = await service.check({ quickSnapshotId: quick.taskId, artistPath, taskId: 'validation' })
+    const validation = await prepareForOrganize(service, { quickSnapshotId: quick.taskId, artistPath, taskId: 'validation' })
     const preview = await service.organizePreview({
       taskId: quick.taskId,
       validationId: validation.id,
@@ -730,7 +610,7 @@ describe('song organizer cleanup preview', () => {
 
     const response = await service.organize({
       taskId: quick.taskId,
-      validationId: validation.id,
+      validationId: preview.validationId,
       operationId: 'organize-operation',
       artistPaths: [artistPath],
       confirmedItemPaths: preview.items.map(item => item.path),
@@ -741,7 +621,7 @@ describe('song organizer cleanup preview', () => {
     expect(response.result.type).toBe('organize')
     expect(response.result.failed).toEqual([])
     expect(refreshedSnapshots).toHaveLength(1)
-    expect(validate).toHaveBeenCalledTimes(1)
+    expect(validate).not.toHaveBeenCalled()
     expect(response.snapshot?.validationStatus).toBe('unchecked')
     expect(operationProgress
       .filter(progress => progress.type == 'organize' && progress.phase == 'cleanup')
@@ -798,7 +678,7 @@ describe('song organizer cleanup preview', () => {
     const trashItem = Reflect.get(shell, 'trashItem') as ReturnType<typeof vi.fn>
     trashItem.mockImplementation(async(target: string) => fs.rm(target, { recursive: true, force: true }))
     const quick = await service.scan({ root, taskId: 'quick-before-journal-failure' })
-    const validation = await service.check({
+    const validation = await prepareForOrganize(service, {
       quickSnapshotId: quick.taskId,
       artistPath,
       taskId: 'validation-before-journal-failure',
@@ -815,7 +695,7 @@ describe('song organizer cleanup preview', () => {
 
     const response = await service.organize({
       taskId: quick.taskId,
-      validationId: validation.id,
+      validationId: preview.validationId,
       operationId: 'organize-journal-failure',
       artistPaths: [artistPath],
       confirmedItemPaths: preview.items.map(item => item.path),
@@ -829,7 +709,7 @@ describe('song organizer cleanup preview', () => {
     }))
     expect(response.snapshot?.validationStatus).toBe('unchecked')
     expect(refreshedSnapshots).toHaveLength(1)
-    expect(validate).toHaveBeenCalledTimes(1)
+    expect(validate).not.toHaveBeenCalled()
     expect(service.isBusy()).toBe(false)
     await expect(fs.lstat(coverPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
@@ -866,7 +746,7 @@ describe('song organizer cleanup preview', () => {
     const trashItem = Reflect.get(shell, 'trashItem') as ReturnType<typeof vi.fn>
     trashItem.mockImplementation(async(target: string) => fs.rm(target, { recursive: true, force: true }))
     const quick = await service.scan({ root, taskId: 'quick-before-recount' })
-    const validation = await service.check({ quickSnapshotId: quick.taskId, artistPath, taskId: 'validation-before-recount' })
+    const validation = await prepareForOrganize(service, { quickSnapshotId: quick.taskId, artistPath, taskId: 'validation-before-recount' })
     const preview = await service.organizePreview({
       taskId: quick.taskId,
       validationId: validation.id,
@@ -875,7 +755,7 @@ describe('song organizer cleanup preview', () => {
 
     const response = await service.organize({
       taskId: quick.taskId,
-      validationId: validation.id,
+      validationId: preview.validationId,
       operationId: 'organize-with-recount',
       artistPaths: [artistPath],
       confirmedItemPaths: preview.items.map(item => item.path),

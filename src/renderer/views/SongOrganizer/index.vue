@@ -31,7 +31,6 @@
         <header :class="$style.heading">
           <h1>{{ $t('song_organizer') }}</h1>
           <p>{{ $t('song_organizer__description') }}</p>
-          <p v-if="!validatorAvailable" :class="$style.error">{{ $t('song_organizer__validator_unavailable') }}</p>
         </header>
 
         <div :class="$style.rootRow">
@@ -53,17 +52,6 @@
               {{ $t('song_organizer__rescan') }}
             </base-btn>
           </div>
-        </div>
-
-        <div v-if="checkProgressLabel" :class="$style.operationProgress" aria-live="polite">
-          <strong>{{ checkProgressLabel }}</strong>
-          <span
-            v-if="checkProgressTarget"
-            :class="$style.operationTarget"
-            :title="checkProgressTarget"
-          >
-            {{ $t('song_organizer__check_current_target', { target: checkProgressTarget }) }}
-          </span>
         </div>
 
         <div v-if="operationProgressLabel" :class="$style.operationProgress" aria-live="polite">
@@ -106,9 +94,6 @@
                 </td>
                 <td>
                   <div :class="$style.statusTags">
-                    <span :class="[$style.statusTag, $style[row.validationStatus]]">
-                      {{ $t(`song_organizer__status_${row.validationStatus}`) }}
-                    </span>
                     <span
                       v-for="status in row.statuses"
                       :key="status"
@@ -124,14 +109,6 @@
                 </td>
                 <td>
                   <div :class="$style.rowActions">
-                    <base-btn
-                      min
-                      :disabled="scanning || operating || !validatorAvailable || Boolean(row.checkDisabledReason)"
-                      :title="!validatorAvailable ? $t('song_organizer__validator_unavailable') : actionDisabledText(row.checkDisabledReason, row, 'check')"
-                      @click="check(row)"
-                    >
-                      {{ $t('song_organizer__check') }}
-                    </base-btn>
                     <base-btn
                       min
                       :disabled="scanning || operating || Boolean(row.organizeDisabledReason)"
@@ -178,9 +155,6 @@ const {
   actionDisabledText,
   artistRows,
   capabilityReady,
-  check,
-  checkProgressLabel,
-  checkProgressTarget,
   chooseSpecifiedRoot,
   detailDialogConfirmation,
   detailDialogTitle,
@@ -203,7 +177,6 @@ const {
   snapshot,
   supported,
   useDownloadRoot,
-  validatorAvailable,
   visibleRecovery,
 } = useSongOrganizer()
 </script>

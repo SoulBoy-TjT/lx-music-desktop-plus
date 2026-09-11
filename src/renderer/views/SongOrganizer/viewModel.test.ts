@@ -115,7 +115,7 @@ describe('song organizer row view model', () => {
     })
   })
 
-  it('shows quick rows as unchecked and enables organize only for the matching latest validation', () => {
+  it('allows organizing quick rows without an audio validation', () => {
     const fullValidationSnapshot = snapshot({ validationStatus: 'checked' })
     const quick = snapshot({
       validationStatus: 'unchecked',
@@ -146,7 +146,7 @@ describe('song organizer row view model', () => {
 
     expect(unchecked.validationStatus).toBe('unchecked')
     expect(unchecked.checkDisabledReason).toBeUndefined()
-    expect(unchecked.organizeDisabledReason).toBe('check_required')
+    expect(unchecked.organizeDisabledReason).toBeUndefined()
     expect(checked.validationStatus).toBe('checked')
     expect(checked.validation?.id).toBe('validation')
     expect(checked.audioAnomalyCount).toBe(1)
