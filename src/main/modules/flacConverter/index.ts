@@ -225,6 +225,55 @@ const ensureSafeDirectoryTree = async(outputDirectory: string, targetDirectory: 
   }
 }
 
+interface RetryCleanupFile {
+  path: string
+  identity?: string
+  size: number
+  mtimeMs: number
+}
+
+const prepareRetryDirectories = async(preview: FlacConversionPreview, sourcePaths: string[]) => {
+  if (!sourcePaths.length) throw new Error('没有可重试的异常歌曲文件夹。')
+  await assertPlainDirectoryTree(preview.sourceDirectory, '来源目录')
+  const directories = new Map<string, string>()
+  for (const sourcePath of sourcePaths) {
+    const resolved = path.resolve(sourcePath)
+    if (!isSameOrDescendant(preview.sourceDirectory, resolved) ||
+      isSameOrDescendant(preview.outputDirectory, resolved) ||
+      !['.flac', '.mp3'].includes(path.extname(resolved).toLowerCase())) {
+      throw new Error(`异常歌曲路径超出来源范围：${sourcePath}`)
+    }
+    const directory = path.dirname(resolved)
+    await assertPlainDirectoryTree(directory, '异常歌曲文件夹')
+    const key = normalizePathKey(directory)
+    if (!preview.items.some(item => normalizePathKey(path.dirname(item.sourcePath)) == key)) {
+      throw new Error(`异常歌曲文件夹没有可转换的源歌曲，保留已有输出：${directory}`)
+    }
+    directories.set(key, directory)
+  }
+  const files: RetryCleanupFile[] = []
+  for (const directory of directories.values()) {
+    const target = path.resolve(preview.outputDirectory, path.relative(preview.sourceDirectory, directory))
+    if (!isSameOrDescendant(preview.outputDirectory, target) || isSameOrDescendant(target, preview.sourceDirectory)) {
+      throw new Error(`重试清理路径超出输出范围：${target}`)
+    }
+    // Validate existing ancestors even when the final output directory is absent.
+    let ancestor = target
+    while (!await pathExists(ancestor)) ancestor = path.dirname(ancestor)
+    await assertPlainDirectoryTree(ancestor, '重试输出目录')
+    if (!await pathExists(target)) continue
+    await assertPlainDirectoryTree(target, '重试输出目录')
+    for (const entry of await fs.readdir(target, { withFileTypes: true })) {
+      if (path.extname(entry.name).toLowerCase() != '.mp3') continue
+      const filePath = path.join(target, entry.name)
+      const stat = await fs.lstat(filePath)
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`重试输出歌曲必须是普通文件：${filePath}`)
+      files.push({ path: filePath, identity: fileIdentity(stat), size: stat.size, mtimeMs: stat.mtimeMs })
+    }
+  }
+  return { directoryKeys: new Set(directories.keys()), files }
+}
+
 const emptyResult = (outputDirectory: string, sourceSongCount: number): FlacConversionResult => ({
   taskId: randomUUID(),
   outputDirectory,
@@ -438,11 +487,30 @@ export class FlacConverterService {
     try {
       const capability = await this.capability()
       if (!capability.supported || !capability.ffmpegAvailable) throw new Error('内置 FFmpeg 不可用。')
-      const preview = await this.preview(params)
+      const initialPreview = await this.preview(params)
+      let retryDirectories: Set<string> | undefined
+      if (params.retrySourcePaths) {
+        const cleanup = await prepareRetryDirectories(initialPreview, params.retrySourcePaths)
+        retryDirectories = cleanup.directoryKeys
+        for (const file of cleanup.files) {
+          this.assertNotCancelled()
+          await assertPlainDirectoryTree(path.dirname(file.path), '重试输出目录')
+          const stat = await fs.lstat(file.path)
+          if (!stat.isFile() || stat.isSymbolicLink() || fileIdentity(stat) != file.identity ||
+            stat.size != file.size || stat.mtimeMs != file.mtimeMs) throw new Error(`重试清理前输出歌曲发生变化：${file.path}`)
+          this.assertNotCancelled()
+          await fs.unlink(file.path)
+        }
+        this.assertNotCancelled()
+      }
+      const preview = retryDirectories ? await this.preview(params) : initialPreview
+      const selectedItems = retryDirectories
+        ? preview.items.filter(item => retryDirectories.has(normalizePathKey(path.dirname(item.sourcePath))))
+        : preview.items
       const confirmed = new Set(params.confirmedSourcePaths.map(normalizePathKey))
-      const readyItems = preview.items.filter(item => item.status == 'ready' && confirmed.has(normalizePathKey(item.sourcePath)))
+      const readyItems = selectedItems.filter(item => item.status == 'ready' && (retryDirectories != null || confirmed.has(normalizePathKey(item.sourcePath))))
       const result = emptyResult(preview.outputDirectory, preview.items.length)
-      for (const item of preview.items.filter(item => item.status == 'skipped')) {
+      for (const item of selectedItems.filter(item => item.status == 'skipped')) {
         result.skipped.push({ sourcePath: item.sourcePath, targetPath: item.targetPath, reason: item.reason })
       }
       const converter = this.converterFactory(this.ffmpegPath())

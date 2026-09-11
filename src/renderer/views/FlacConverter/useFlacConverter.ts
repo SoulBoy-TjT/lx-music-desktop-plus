@@ -12,6 +12,7 @@ import {
   getFlacConversionPreview,
   getFlacConverterCapability,
   onFlacConversionProgress,
+  openDirInExplorer,
   scanFlacConverterArtists,
   setFlacConversionPaused,
   showSelectDialog,
@@ -24,10 +25,11 @@ type RowStatus = 'idle' | 'preparing' | 'running' | 'pausing' | 'paused' | 'comp
 interface ArtistRowState {
   status: RowStatus
   progress?: FlacConversionProgress
-  anomalies: string[]
+  retrySourcePaths: string[]
+  anomalies: Array<{ message: string, sourcePath?: string }>
 }
 
-const createRowState = (): ArtistRowState => ({ status: 'idle', anomalies: [] })
+const createRowState = (): ArtistRowState => ({ status: 'idle', anomalies: [], retrySourcePaths: [] })
 
 export const useFlacConverter = () => {
   const t = useI18n()
@@ -141,39 +143,54 @@ export const useFlacConverter = () => {
     await scanArtists()
   }
 
-  const anomalyLines = (result: FlacConversionResult): string[] => {
-    const lines: string[] = []
+  const anomalyLines = (result: FlacConversionResult): ArtistRowState['anomalies'] => {
+    const lines: ArtistRowState['anomalies'] = []
     if (!result.countMatches) {
-      lines.push(t('flac_conversion__count_mismatch', {
-        source: result.sourceSongCount,
-        output: result.outputSongCount,
-      }))
+      lines.push({
+        message: t('flac_conversion__count_mismatch', {
+          source: result.sourceSongCount,
+          output: result.outputSongCount,
+        }),
+      })
     }
     for (const item of result.skipped) {
-      lines.push(t('flac_conversion__result_item', {
-        status: t('flac_conversion__result_skipped'),
-        source: item.sourcePath,
-        target: item.targetPath,
-        reason: item.reason ? `；${item.reason}` : '',
-      }))
+      lines.push({
+        sourcePath: item.sourcePath,
+        message: t('flac_conversion__result_item', {
+          status: t('flac_conversion__result_skipped'),
+          source: item.sourcePath,
+          target: item.targetPath,
+          reason: item.reason ? `；${item.reason}` : '',
+        }),
+      })
     }
     for (const item of result.failed) {
-      lines.push(t('flac_conversion__result_item', {
-        status: t('flac_conversion__result_failed'),
-        source: item.sourcePath,
-        target: item.targetPath,
-        reason: item.reason ? `；${item.reason}` : '',
-      }))
+      lines.push({
+        sourcePath: item.sourcePath,
+        message: t('flac_conversion__result_item', {
+          status: t('flac_conversion__result_failed'),
+          source: item.sourcePath,
+          target: item.targetPath,
+          reason: item.reason ? `；${item.reason}` : '',
+        }),
+      })
     }
     return lines
   }
 
-  const convertArtist = async(artist: FlacConverterArtistFolder) => {
+  const openAnomaly = async(anomaly: ArtistRowState['anomalies'][number]) => {
+    if (!anomaly.sourcePath) return
+    await openDirInExplorer(anomaly.sourcePath)
+  }
+
+  const convertArtist = async(artist: FlacConverterArtistFolder, retrySourcePaths?: string[]) => {
     if (operating.value || scanning.value || !artist.songCount) return
     operating.value = true
     activeSourceDirectory.value = artist.path
     errorMessage.value = ''
     const state = rowStates.value[artist.path] ?? (rowStates.value[artist.path] = createRowState())
+    const previousAnomalies = state.anomalies
+    if (!retrySourcePaths) state.retrySourcePaths = []
     state.status = 'preparing'
     state.progress = undefined
     state.anomalies = []
@@ -182,10 +199,11 @@ export const useFlacConverter = () => {
         sourceDirectory: artist.path,
         outputParentDirectory: outputParentDirectory.value || undefined,
       }
-      const preview = await getFlacConversionPreview(params)
+      const preview = retrySourcePaths ? undefined : await getFlacConversionPreview(params)
       const result = await applyFlacConversion({
         ...params,
-        confirmedSourcePaths: preview.items.filter(item => item.status == 'ready').map(item => item.sourcePath),
+        confirmedSourcePaths: preview?.items.filter(item => item.status == 'ready').map(item => item.sourcePath) ?? [],
+        ...(retrySourcePaths ? { retrySourcePaths } : {}),
       })
       artist.outputDirectory = result.outputDirectory
       const summary = summarizeFlacConversionResult(result)
@@ -193,15 +211,16 @@ export const useFlacConverter = () => {
         taskId: result.taskId,
         sourceDirectory: artist.path,
         completedCount: result.succeeded.length,
-        totalCount: preview.readyCount,
+        totalCount: preview?.readyCount ?? result.succeeded.length + result.failed.length,
         phase: 'completed',
       }
+      state.retrySourcePaths = [...result.failed, ...result.skipped.filter(item => item.reason != '目标 MP3 已存在，禁止覆盖。')].map(item => item.sourcePath)
       state.anomalies = summary.hasAnomalies ? anomalyLines(result) : []
       state.status = summary.hasAnomalies ? 'anomaly' : 'completed'
     } catch (error) {
       const reason = (error as Error).message
       state.status = 'failed'
-      state.anomalies = [t('flac_conversion__operation_failed', { reason })]
+      state.anomalies = [...(retrySourcePaths ? previousAnomalies : []), { message: t('flac_conversion__operation_failed', { reason }) }]
     } finally {
       operating.value = false
       activeSourceDirectory.value = ''
@@ -210,6 +229,12 @@ export const useFlacConverter = () => {
         await scanArtists()
       }
     }
+  }
+
+  const retryArtistAnomalies = async(artist: FlacConverterArtistFolder) => {
+    const paths = rowStates.value[artist.path]?.retrySourcePaths
+    if (!paths?.length) return
+    await convertArtist(artist, [...paths])
   }
 
   const togglePause = async(artist: FlacConverterArtistFolder) => {
@@ -222,7 +247,7 @@ export const useFlacConverter = () => {
       if (!pauseState.busy) return
       state.status = shouldPause ? (pauseState.paused ? 'paused' : 'pausing') : 'running'
     } catch (error) {
-      state.anomalies = [t('flac_conversion__pause_failed', { reason: (error as Error).message })]
+      state.anomalies = [{ message: t('flac_conversion__pause_failed', { reason: (error as Error).message }) }]
     }
   }
 
@@ -286,9 +311,11 @@ export const useFlacConverter = () => {
     ffmpegAvailable,
     isCustomRootDirectory,
     operating,
+    openAnomaly,
     outputParentDirectory,
     progressRatio,
     rootDirectory,
+    retryArtistAnomalies,
     scanArtists,
     scanning,
     selectRootDirectory,

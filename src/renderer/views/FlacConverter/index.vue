@@ -115,9 +115,20 @@
               </tr>
               <tr v-if="row.state.anomalies.length" :class="$style.anomalyRow">
                 <td colspan="5">
-                  <strong>{{ $t('flac_conversion__anomalies') }}</strong>
+                  <div :class="$style.anomalyActions">
+                    <strong>{{ $t('flac_conversion__anomalies') }}</strong>
+                    <base-btn min outline :disabled="scanning || operating || !row.state.retrySourcePaths.length" @click="retryArtistAnomalies(row.artist)">
+                      {{ $t('flac_conversion__retry_anomalies') }}
+                    </base-btn>
+                    <span>{{ $t('flac_conversion__retry_hint') }}</span>
+                  </div>
                   <ul class="select">
-                    <li v-for="(line, index) in row.state.anomalies" :key="`${row.artist.path}:${String(index)}`">{{ line }}</li>
+                    <li v-for="(line, index) in row.state.anomalies" :key="`${row.artist.path}:${String(index)}`">
+                      <span>{{ line.message }}</span>
+                      <base-btn v-if="line.sourcePath" min outline :title="line.sourcePath" @click="openAnomaly(line)">
+                        {{ $t('flac_conversion__open') }}
+                      </base-btn>
+                    </li>
                   </ul>
                 </td>
               </tr>
@@ -146,9 +157,11 @@ const {
   ffmpegAvailable,
   isCustomRootDirectory,
   operating,
+  openAnomaly,
   outputParentDirectory,
   progressRatio,
   rootDirectory,
+  retryArtistAnomalies,
   scanArtists,
   scanning,
   selectRootDirectory,
@@ -332,7 +345,17 @@ const {
   overflow: auto;
 }
 
+.anomalyActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .anomalyRow li {
+  padding-bottom: 6px;
+
+  button { margin-left: 8px; }
   line-height: 1.5;
   overflow-wrap: anywhere;
 }

@@ -54,6 +54,7 @@ export interface FlacConversionPreviewParams {
 
 export interface FlacConversionApplyParams extends FlacConversionPreviewParams {
   confirmedSourcePaths: string[]
+  retrySourcePaths?: string[]
 }
 
 export interface FlacConversionProgress {

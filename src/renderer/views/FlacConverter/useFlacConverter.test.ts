@@ -2,7 +2,7 @@ import { effectScope, nextTick, reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FlacConversionPreview, FlacConversionResult, FlacConverterArtistScanResult } from '@common/flacConverter'
 import { appSetting } from '@renderer/store/setting'
-import { applyFlacConversion, getFlacConversionPreview } from '@renderer/utils/ipc'
+import { applyFlacConversion, getFlacConversionPreview, openDirInExplorer } from '@renderer/utils/ipc'
 import { useFlacConverter } from './useFlacConverter'
 
 const mocks = vi.hoisted(() => ({
@@ -33,6 +33,7 @@ vi.mock('@renderer/utils/ipc', () => ({
   getFlacConversionPreview: vi.fn(),
   getFlacConverterCapability: vi.fn(),
   onFlacConversionProgress: vi.fn(),
+  openDirInExplorer: vi.fn(),
   scanFlacConverterArtists: mocks.scanArtists,
   setFlacConversionPaused: vi.fn(),
   showSelectDialog: vi.fn(),
@@ -126,6 +127,87 @@ describe('FLAC converter scanning', () => {
     await converter.convertArtist(converter.artistRows.value[0].artist)
 
     expect(converter.artistRows.value[0].artist.outputDirectory).toBe(countedOutputDirectory)
+    scope.stop()
+  })
+})
+
+
+describe('FLAC converter anomaly actions', () => {
+  it('retains source paths and requests scoped cleanup retry under the operation lock', async() => {
+    vi.clearAllMocks()
+    const scan = scanResult('C:\\Music\\A')
+    const artist = scan.artists[0]
+    const sourcePath = `${artist.path}\\Album\\Broken.flac`
+    const addedPath = `${artist.path}\\Album\\Added.mp3`
+    const targetPath = `${artist.outputDirectory}\\Album\\Broken.mp3`
+    mocks.scanArtists.mockResolvedValue(scan)
+    const preview: FlacConversionPreview = {
+      sourceDirectory: artist.path,
+      outputDirectory: artist.outputDirectory,
+      items: [{ sourcePath, targetPath, kind: 'flac_to_mp3', size: 1, status: 'ready' }],
+      readyCount: 1,
+      skippedCount: 0,
+      totalSize: 1,
+      flacCount: 1,
+      mp3Count: 0,
+    }
+    vi.mocked(getFlacConversionPreview).mockResolvedValue(preview)
+    vi.mocked(applyFlacConversion).mockResolvedValue({
+      taskId: 'failed',
+      outputDirectory: artist.outputDirectory,
+      succeeded: [],
+      skipped: [{ sourcePath: 'other.flac', targetPath, reason: '目标 MP3 已存在，禁止覆盖。' }],
+      failed: [{ sourcePath, targetPath, reason: 'invalid audio' }],
+      sourceSongCount: 1,
+      outputSongCount: 0,
+      countMatches: false,
+    })
+    const scope = effectScope()
+    const converter = scope.run(() => useFlacConverter())!
+    converter.outputParentDirectory.value = 'C:\\Converted'
+    await converter.scanArtists()
+    const row = converter.artistRows.value[0]
+    await converter.convertArtist(row.artist)
+    expect(row.state.status).toBe('anomaly')
+    expect(row.state.anomalies[0].sourcePath).toBeUndefined()
+    expect(row.state.anomalies[2].sourcePath).toBe(sourcePath)
+    await converter.openAnomaly(row.state.anomalies[0])
+    expect(openDirInExplorer).not.toHaveBeenCalled()
+    await converter.openAnomaly(row.state.anomalies[2])
+    expect(openDirInExplorer).toHaveBeenCalledWith(sourcePath)
+
+    vi.mocked(applyFlacConversion).mockRejectedValueOnce(new Error('cleanup denied'))
+    await converter.retryArtistAnomalies(row.artist)
+    expect(row.state.status).toBe('failed')
+    expect(row.state.retrySourcePaths).toEqual([sourcePath])
+    expect(row.state.anomalies.some(item => item.sourcePath == sourcePath)).toBe(true)
+
+    let finishRetry!: (value: FlacConversionResult) => void
+    vi.mocked(applyFlacConversion).mockReturnValueOnce(new Promise(resolve => { finishRetry = resolve }))
+    const retry = converter.retryArtistAnomalies(row.artist)
+    await converter.retryArtistAnomalies(row.artist)
+    expect(getFlacConversionPreview).toHaveBeenCalledTimes(1)
+    expect(converter.operating.value).toBe(true)
+    expect(applyFlacConversion).toHaveBeenLastCalledWith({
+      sourceDirectory: artist.path,
+      outputParentDirectory: 'C:\\Converted',
+      confirmedSourcePaths: [],
+      retrySourcePaths: [sourcePath],
+    })
+    finishRetry({
+      taskId: 'retry',
+      outputDirectory: `${artist.outputDirectory}（2首）`,
+      succeeded: [{ sourcePath, targetPath }, { sourcePath: addedPath, targetPath }],
+      skipped: [],
+      failed: [],
+      sourceSongCount: 2,
+      outputSongCount: 2,
+      countMatches: true,
+    })
+    await retry
+    expect(row.state.status).toBe('completed')
+    expect(row.state.anomalies).toEqual([])
+    expect(converter.operating.value).toBe(false)
     scope.stop()
   })
 })
