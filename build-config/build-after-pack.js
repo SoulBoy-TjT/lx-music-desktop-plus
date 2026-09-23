@@ -1,10 +1,17 @@
 const fs = require('fs').promises
+const path = require('path')
+const asar = require('@electron/asar')
+const { assertProductionArtifacts } = require('./production-artifacts')
 
 // https://github.com/electron-userland/electron-builder/issues/4630
 // https://github.com/electron-userland/electron-builder/issues/4630#issuecomment-782020139
 
 module.exports = async(context) => {
   const { electronPlatformName, appOutDir } = context
+  const resources = electronPlatformName === 'darwin'
+    ? path.join(appOutDir, `${context.packager.appInfo.productFilename}.app/Contents/Resources`)
+    : path.join(appOutDir, 'resources')
+  assertProductionArtifacts(file => asar.extractFile(path.join(resources, 'app.asar'), `dist/${file}`))
   if (electronPlatformName !== 'darwin') return
   const {
     productFilename,

@@ -3,6 +3,7 @@ const fsPromises = require('fs').promises
 const path = require('path')
 const { Arch } = require('electron-builder')
 const nodeAbi = require('node-abi')
+const { assertProductionDirectory } = require('./production-artifacts')
 
 const better_sqlite3_fileNameMap = {
   [Arch.x64]: 'linux-x64',
@@ -52,6 +53,8 @@ const replaceQrcDecodeLib = async(electronNodeAbi, platform, arch) => {
 
 
 module.exports = async(context) => {
+  // The development runner also calls this hook to prepare native libraries.
+  if (context.packager) assertProductionDirectory(path.join(__dirname, '../dist'))
   const { electronPlatformName, arch } = context
   const electronVersion = context.packager?.info?._framework?.version ?? require('../package.json').devDependencies.electron.replace(/^[^\d]*?(\d+)/, '$1')
   const electronNodeAbi = nodeAbi.getAbi(electronVersion, 'electron')

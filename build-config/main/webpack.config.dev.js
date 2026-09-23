@@ -7,6 +7,7 @@ const baseConfig = require('./webpack.config.base')
 
 module.exports = merge(baseConfig, {
   mode: 'development',
+  output: { path: path.join(__dirname, '../../.dev-dist') },
   entry: {
     main: path.join(__dirname, '../../src/main/index-dev.ts'),
     // 'dbService.worker': path.join(__dirname, '../../src/main/worker/dbService/index.ts'),

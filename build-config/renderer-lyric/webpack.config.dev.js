@@ -7,6 +7,7 @@ const baseConfig = require('./webpack.config.base')
 
 module.exports = merge(baseConfig, {
   mode: 'development',
+  output: { path: path.join(__dirname, '../../.dev-dist') },
   devtool: 'eval-source-map',
   plugins: [
     new webpack.DefinePlugin({
