@@ -38,13 +38,11 @@ export const DATA_KEYS = {
   listScrollPosition: 'listScrollPosition',
   listPrevSelectId: 'listPrevSelectId',
   listUpdateInfo: 'listUpdateInfo',
-  ignoreVersion: 'ignoreVersion',
 
   leaderboardSetting: 'leaderboardSetting',
   songListSetting: 'songListSetting',
   searchSetting: 'searchSetting',
 
-  lastStartInfo: 'lastStartInfo',
 } as const
 
 export const DEFAULT_SETTING = {

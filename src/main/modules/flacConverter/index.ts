@@ -18,6 +18,7 @@ import { isGeneratedMp3DirectoryName, stripSongCountSuffix } from '../audioWorks
 import { AudioFfmpegTerminationError } from '../audioFfmpeg/processTermination'
 import { FfmpegFlacConverter } from './ffmpegAdapter'
 import { FlacConversionPauseGate } from './pauseGate'
+import { planAlbumDirectories } from './albumDirectories'
 
 const normalizePathKey = (filePath: string): string => {
   const resolved = path.resolve(filePath)
@@ -146,10 +147,10 @@ const collectSourceAudioFiles = async(sourceDirectory: string, excludedDirectory
   return files
 }
 
-const countOutputMp3Files = async(outputDirectory: string): Promise<number> => {
-  if (!await pathExists(outputDirectory)) return 0
+const collectOutputMp3Files = async(outputDirectory: string): Promise<string[]> => {
+  if (!await pathExists(outputDirectory)) return []
   await assertPlainDirectory(outputDirectory, 'MP3 输出路径')
-  let count = 0
+  const files: string[] = []
   const visit = async(directory: string): Promise<void> => {
     const entries = await fs.readdir(directory, { withFileTypes: true })
     for (const entry of entries) {
@@ -159,12 +160,12 @@ const countOutputMp3Files = async(outputDirectory: string): Promise<number> => {
       if (stat.isDirectory()) {
         await visit(entryPath)
       } else if (stat.isFile() && path.extname(entry.name).toLocaleLowerCase('en-US') == '.mp3') {
-        count++
+        files.push(entryPath)
       }
     }
   }
   await visit(outputDirectory)
-  return count
+  return files
 }
 
 const appendSongCountSuffix = (directory: string, songCount: number): string => `${stripSongCountSuffix(directory)}（${songCount}首）`
@@ -177,6 +178,7 @@ const updateResultOutputDirectory = (result: FlacConversionResult, outputDirecto
   result.succeeded.forEach(updateTargetPath)
   result.skipped.forEach(updateTargetPath)
   result.failed.forEach(updateTargetPath)
+  result.extraOutputPaths = result.extraOutputPaths?.map(item => path.join(outputDirectory, path.relative(previousDirectory, item)))
   result.outputDirectory = outputDirectory
 }
 
@@ -253,7 +255,8 @@ const prepareRetryDirectories = async(preview: FlacConversionPreview, sourcePath
   }
   const files: RetryCleanupFile[] = []
   for (const directory of directories.values()) {
-    const target = path.resolve(preview.outputDirectory, path.relative(preview.sourceDirectory, directory))
+    const item = preview.items.find(item => normalizePathKey(path.dirname(item.sourcePath)) == normalizePathKey(directory))!
+    const target = path.dirname(item.targetPath)
     if (!isSameOrDescendant(preview.outputDirectory, target) || isSameOrDescendant(target, preview.sourceDirectory)) {
       throw new Error(`重试清理路径超出输出范围：${target}`)
     }
@@ -415,13 +418,14 @@ export class FlacConverterService {
     if (await pathExists(outputDirectory)) await assertPlainDirectory(outputDirectory, 'MP3 输出路径')
 
     const sourceFiles = await collectSourceAudioFiles(sourceDirectory, outputDirectory)
+    const albumPlan = await planAlbumDirectories(sourceDirectory, outputDirectory)
     const items: FlacConversionPreviewItem[] = []
     for (const sourceFile of sourceFiles) {
       const { sourcePath, kind } = sourceFile
-      const relativePath = path.relative(sourceDirectory, sourcePath)
-      const targetPath = path.join(outputDirectory, kind == 'flac_to_mp3'
-        ? relativePath.slice(0, -path.extname(relativePath).length) + '.mp3'
-        : relativePath)
+      const name = path.basename(sourcePath)
+      const targetPath = path.join(albumPlan.targets.get(path.dirname(sourcePath))!, kind == 'flac_to_mp3'
+        ? name.slice(0, -path.extname(name).length) + '.mp3'
+        : name)
       try {
         const stat = await fs.lstat(sourcePath)
         let reason: string | undefined
@@ -487,7 +491,24 @@ export class FlacConverterService {
     try {
       const capability = await this.capability()
       if (!capability.supported || !capability.ffmpegAvailable) throw new Error('内置 FFmpeg 不可用。')
-      const initialPreview = await this.preview(params)
+      let initialPreview = await this.preview(params)
+      if (params.retrySourcePaths) await prepareRetryDirectories(initialPreview, params.retrySourcePaths)
+      const albumPlan = await planAlbumDirectories(initialPreview.sourceDirectory, initialPreview.outputDirectory)
+      const renames = params.retrySourcePaths
+        ? albumPlan.renames.filter(rename => params.retrySourcePaths!.some(source => isSameOrDescendant(rename.sourceDirectory, path.dirname(source))))
+        : albumPlan.renames
+      // Validate the whole plan before any rename or retry cleanup.
+      for (const rename of renames) {
+        await assertPlainDirectoryTree(rename.from, '专辑输出目录')
+        if (await pathExists(rename.to)) throw new Error(`专辑输出目标已存在，禁止覆盖：${rename.to}`)
+      }
+      for (const rename of [...renames].reverse()) {
+        this.assertNotCancelled()
+        await assertPlainDirectoryTree(rename.from, '专辑输出目录')
+        if (await pathExists(rename.to)) throw new Error(`专辑输出目标已存在，禁止覆盖：${rename.to}`)
+        await fs.rename(rename.from, rename.to)
+      }
+      if (renames.length) initialPreview = await this.preview(params)
       let retryDirectories: Set<string> | undefined
       if (params.retrySourcePaths) {
         const cleanup = await prepareRetryDirectories(initialPreview, params.retrySourcePaths)
@@ -565,9 +586,22 @@ export class FlacConverterService {
           await cleanupConversionTempFile(tempPath)
         }
       }
-      result.sourceSongCount = (await collectSourceAudioFiles(preview.sourceDirectory, preview.outputDirectory)).length
-      result.outputSongCount = await countOutputMp3Files(preview.outputDirectory)
+      const finalSourceFiles = await collectSourceAudioFiles(preview.sourceDirectory, preview.outputDirectory)
+      const outputFiles = await collectOutputMp3Files(preview.outputDirectory)
+      result.sourceSongCount = finalSourceFiles.length
+      result.outputSongCount = outputFiles.length
       result.countMatches = result.sourceSongCount == result.outputSongCount
+      if (!result.countMatches) {
+        const finalPlan = await planAlbumDirectories(preview.sourceDirectory, preview.outputDirectory)
+        const expected = new Map(finalSourceFiles.map(item => {
+          const name = path.basename(item.sourcePath)
+          const target = path.join(finalPlan.targets.get(path.dirname(item.sourcePath))!, name.slice(0, -path.extname(name).length) + '.mp3')
+          return [normalizePathKey(target), item.sourcePath]
+        }))
+        const actual = new Set(outputFiles.map(normalizePathKey))
+        result.extraOutputPaths = outputFiles.filter(file => !expected.has(normalizePathKey(file)))
+        result.missingSourcePaths = [...expected].filter(([target]) => !actual.has(target)).map(([, source]) => source)
+      }
       if (await pathExists(preview.outputDirectory)) {
         const countedOutputDirectory = appendSongCountSuffix(preview.outputDirectory, result.outputSongCount)
         if (normalizePathKey(countedOutputDirectory) != normalizePathKey(preview.outputDirectory)) {

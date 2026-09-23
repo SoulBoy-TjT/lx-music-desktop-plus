@@ -82,6 +82,80 @@ const params = (retrySourcePaths = [path.join(source, 'Album/broken.flac')]) => 
 })
 
 describe('scoped FLAC retry cleanup', () => {
+  it('reuses and renames an album after its count suffix changes, without duplicate output', async() => {
+    await fs.rename(path.join(source, 'Album'), path.join(source, 'Album (7首)'))
+    await fs.rename(path.join(output, 'Album'), path.join(output, 'Album（8首）'))
+    vi.mocked(fs.rename).mockClear()
+    const { service, convert } = makeService()
+    const request = { sourceDirectory: source, outputParentDirectory: outputParent }
+    const preview = await service.preview(request)
+    expect(preview.readyCount).toBe(0)
+    expect(fs.rename).not.toHaveBeenCalled()
+    const result = await service.convert({ ...request, confirmedSourcePaths: [] })
+    expect(result.outputSongCount).toBe(4)
+    expect(convert).not.toHaveBeenCalled()
+    expect(lookup(path.join(output, 'Album (7首)/broken.mp3')).data).toBe('old')
+    expect(entries.has(path.join(output, 'Album（8首）'))).toBe(false)
+  })
+
+  it('blocks coexisting album candidates before retry cleanup even when an exact name exists', async() => {
+    addFile(path.join(output, 'Album (8首)/duplicate.mp3'))
+    const { service, convert } = makeService()
+    await expect(service.convert(params())).rejects.toThrow('多个专辑输出目录')
+    expect(fs.unlink).not.toHaveBeenCalled()
+    expect(fs.rename).not.toHaveBeenCalled()
+    expect(convert).not.toHaveBeenCalled()
+  })
+
+  it('keeps unselected nested and sibling album names during scoped retry', async() => {
+    await fs.rename(path.join(source, 'Album/Nested'), path.join(source, 'Album/Nested (1首)'))
+    await fs.rename(path.join(source, 'Album'), path.join(source, 'Album (3首)'))
+    await fs.rename(path.join(source, 'Other'), path.join(source, 'Other (1首)'))
+    const { service } = makeService()
+    const result = await service.convert(params([path.join(source, 'Album (3首)/broken.flac')]))
+    expect(result.succeeded).toHaveLength(2)
+    expect(lookup(path.join(output, 'Album (3首)/Nested/keep.mp3')).data).toBe('old')
+    expect(lookup(path.join(output, 'Other/keep.mp3')).data).toBe('old')
+  })
+
+  it('synchronizes nested albums before parents in a normal conversion', async() => {
+    await fs.rename(path.join(source, 'Album/Nested'), path.join(source, 'Album/Nested (1首)'))
+    await fs.rename(path.join(source, 'Album'), path.join(source, 'Album (3首)'))
+    const { service } = makeService()
+    await service.convert({ sourceDirectory: source, outputParentDirectory: outputParent, confirmedSourcePaths: [] })
+    expect(lookup(path.join(output, 'Album (3首)/Nested (1首)/keep.mp3')).data).toBe('old')
+  })
+
+  it.each(['source collision', 'output link', 'output file'])('blocks %s before renaming', async scenario => {
+    if (scenario == 'source collision') addFile(path.join(source, 'Album (2首)/other.mp3'))
+    else entries.set(path.join(output, 'Album'), { kind: scenario == 'output link' ? 'link' : 'file', data: '' })
+    const { service } = makeService()
+    await expect(service.convert(params())).rejects.toThrow()
+    expect(fs.rename).not.toHaveBeenCalled()
+    expect(fs.unlink).not.toHaveBeenCalled()
+  })
+
+  it('stops without conversion or cleanup when album rename fails', async() => {
+    await fs.rename(path.join(source, 'Album'), path.join(source, 'Album (3首)'))
+    vi.mocked(fs.rename).mockRejectedValueOnce(new Error('rename denied'))
+    const { service, convert } = makeService()
+    await expect(service.convert(params([path.join(source, 'Album (3首)/broken.flac')]))).rejects.toThrow('rename denied')
+    expect(convert).not.toHaveBeenCalled()
+    expect(fs.unlink).not.toHaveBeenCalled()
+  })
+
+  it('locates extra output and missing source files on a count mismatch', async() => {
+    addFile(path.join(source, 'Missing.flac'))
+    addFile(path.join(output, 'Extra.mp3'))
+    addFile(path.join(output, 'Extra2.mp3'))
+    const { service } = makeService()
+    const result = await service.convert({ sourceDirectory: source, outputParentDirectory: outputParent, confirmedSourcePaths: [] })
+    expect(result.extraOutputPaths).toEqual(expect.arrayContaining([
+      path.join(result.outputDirectory, 'Extra.mp3'), path.join(result.outputDirectory, 'Extra2.mp3'),
+    ]))
+    expect(result.missingSourcePaths).toEqual([path.join(source, 'Missing.flac')])
+  })
+
   it('clears only direct MP3 output and reconverts every song in deduplicated anomaly folders', async() => {
     const { service, convert } = makeService()
     const result = await service.convert(params([path.join(source, 'Album/broken.flac'), path.join(source, 'Album/good.mp3')]))

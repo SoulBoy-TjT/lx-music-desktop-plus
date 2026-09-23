@@ -155,6 +155,8 @@ describe('FLAC converter anomaly actions', () => {
     vi.mocked(applyFlacConversion).mockResolvedValue({
       taskId: 'failed',
       outputDirectory: artist.outputDirectory,
+      extraOutputPaths: [`${artist.outputDirectory}\\Extra.mp3`],
+      missingSourcePaths: [`${artist.path}\\Missing.flac`],
       succeeded: [],
       skipped: [{ sourcePath: 'other.flac', targetPath, reason: '目标 MP3 已存在，禁止覆盖。' }],
       failed: [{ sourcePath, targetPath, reason: 'invalid audio' }],
@@ -169,11 +171,14 @@ describe('FLAC converter anomaly actions', () => {
     const row = converter.artistRows.value[0]
     await converter.convertArtist(row.artist)
     expect(row.state.status).toBe('anomaly')
-    expect(row.state.anomalies[0].sourcePath).toBeUndefined()
-    expect(row.state.anomalies[2].sourcePath).toBe(sourcePath)
-    await converter.openAnomaly(row.state.anomalies[0])
-    expect(openDirInExplorer).not.toHaveBeenCalled()
+    expect(row.state.anomalies[2].sourcePath).toBeUndefined()
+    expect(row.state.anomalies).toHaveLength(4)
+    expect(row.state.anomalies[0].sourcePath).toBe(`${artist.outputDirectory}\\Extra.mp3`)
+    expect(row.state.anomalies[1].sourcePath).toBe(`${artist.path}\\Missing.flac`)
+    expect(row.state.anomalies[3].sourcePath).toBe(sourcePath)
     await converter.openAnomaly(row.state.anomalies[2])
+    expect(openDirInExplorer).not.toHaveBeenCalled()
+    await converter.openAnomaly(row.state.anomalies[3])
     expect(openDirInExplorer).toHaveBeenCalledWith(sourcePath)
 
     vi.mocked(applyFlacConversion).mockRejectedValueOnce(new Error('cleanup denied'))

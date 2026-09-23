@@ -80,6 +80,8 @@ export interface FlacConversionResultItem {
 }
 
 export interface FlacConversionResult {
+  extraOutputPaths?: string[]
+  missingSourcePaths?: string[]
   taskId: string
   outputDirectory: string
   succeeded: FlacConversionResultItem[]

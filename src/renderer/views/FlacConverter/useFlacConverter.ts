@@ -17,7 +17,7 @@ import {
   setFlacConversionPaused,
   showSelectDialog,
 } from '@renderer/utils/ipc'
-import { summarizeFlacConversionResult } from './resultState'
+import { anomalousSkippedItems, summarizeFlacConversionResult } from './resultState'
 import { resolveFlacConverterRootDirectory } from './rootDirectory'
 
 type RowStatus = 'idle' | 'preparing' | 'running' | 'pausing' | 'paused' | 'completed' | 'anomaly' | 'failed'
@@ -145,6 +145,12 @@ export const useFlacConverter = () => {
 
   const anomalyLines = (result: FlacConversionResult): ArtistRowState['anomalies'] => {
     const lines: ArtistRowState['anomalies'] = []
+    for (const filePath of result.extraOutputPaths ?? []) {
+      lines.push({ sourcePath: filePath, message: t('flac_conversion__extra_output', { path: filePath }) })
+    }
+    for (const filePath of result.missingSourcePaths ?? []) {
+      lines.push({ sourcePath: filePath, message: t('flac_conversion__missing_output', { path: filePath }) })
+    }
     if (!result.countMatches) {
       lines.push({
         message: t('flac_conversion__count_mismatch', {
@@ -153,7 +159,7 @@ export const useFlacConverter = () => {
         }),
       })
     }
-    for (const item of result.skipped) {
+    for (const item of anomalousSkippedItems(result)) {
       lines.push({
         sourcePath: item.sourcePath,
         message: t('flac_conversion__result_item', {
@@ -214,7 +220,7 @@ export const useFlacConverter = () => {
         totalCount: preview?.readyCount ?? result.succeeded.length + result.failed.length,
         phase: 'completed',
       }
-      state.retrySourcePaths = [...result.failed, ...result.skipped.filter(item => item.reason != '目标 MP3 已存在，禁止覆盖。')].map(item => item.sourcePath)
+      state.retrySourcePaths = [...result.failed, ...anomalousSkippedItems(result)].map(item => item.sourcePath)
       state.anomalies = summary.hasAnomalies ? anomalyLines(result) : []
       state.status = summary.hasAnomalies ? 'anomaly' : 'completed'
     } catch (error) {

@@ -15,6 +15,12 @@ const result = (overrides: Partial<FlacConversionResult> = {}): FlacConversionRe
 })
 
 describe('FLAC conversion result visibility', () => {
+  it('does not treat existing MP3 output as an anomaly', () => {
+    expect(summarizeFlacConversionResult(result({
+      skipped: [{ sourcePath: 'a.flac', targetPath: 'a.mp3', reason: '目标 MP3 已存在，禁止覆盖。' }],
+    })).hasAnomalies).toBe(false)
+  })
+
   it('hides details when conversion has no anomalies', () => {
     expect(summarizeFlacConversionResult(result())).toEqual({
       hasAnomalies: false,

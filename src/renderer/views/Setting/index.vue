@@ -111,7 +111,7 @@ export default {
         { id: 'SettingOdc', title: t('setting__odc') },
         { id: 'SettingBackup', title: t('setting__backup') },
         { id: 'SettingOther', title: t('setting__other') },
-        { id: 'SettingUpdate', title: t('setting__update') },
+        { id: 'SettingUpdate', title: t('setting__version') },
         { id: 'SettingAbout', title: t('setting__about') },
       ]
     })
